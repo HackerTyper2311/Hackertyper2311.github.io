@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Minecraft UI Simulator</title>
+<title>Minecraft UI Simulator v3</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 body{background:#111;color:white;font-family:sans-serif;text-align:center}
@@ -11,14 +11,22 @@ button{margin:5px;padding:8px 16px;background:#222;color:white;border:1px solid 
 .screen{display:none;border:2px solid #444;margin:10px;padding:10px}
 .active{display:block}
 .grid{display:grid;grid-template-columns:repeat(9,40px);gap:4px;justify-content:center}
-.slot{width:40px;height:40px;border:1px solid #777}
+.slot{width:40px;height:40px;position:relative}
+.slot img{width:100%;height:100%;image-rendering:pixelated}
 #hudBar{display:flex;justify-content:center;margin-top:20px}
-.hudSlot{width:40px;height:40px;border:1px solid #aaa;margin:2px}
+.hudSlot{width:40px;height:40px;margin:2px}
+.hudSlot img{width:100%;height:100%;image-rendering:pixelated}
+.bg{width:320px;height:180px;object-fit:cover;margin:auto;display:block}
 </style>
 </head>
 <body>
-<h1>🧱 Minecraft UI Simulator</h1>
-<input type="file" id="fileInput" accept=".mcpack,.zip">
+<h1>🧱 Minecraft UI Simulator v3</h1>
+
+<input type="file" id="baseInput" accept=".zip">
+<p>Base pack (bedrock samples)</p>
+
+<input type="file" id="overlayInput" accept=".mcpack,.zip">
+<p>Overlay pack</p>
 
 <div id="controls">
 <button onclick="showScreen('menu')">Main Menu</button>
@@ -42,33 +50,68 @@ button{margin:5px;padding:8px 16px;background:#222;color:white;border:1px solid 
 </div>
 
 <script>
-let textures={};
+let basePack={};
+let overlayPack={};
 
 function showScreen(id){
  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
  document.getElementById(id).classList.add('active');
 }
 
-document.getElementById('fileInput').addEventListener('change',async(e)=>{
- const file=e.target.files[0];
+async function loadPack(file){
  const zip=await JSZip.loadAsync(file);
- textures={};
+ let pack={};
 
  await Promise.all(Object.keys(zip.files).map(async(path)=>{
   if(path.endsWith('.png')){
    const blob=await zip.files[path].async('blob');
-   textures[path]=URL.createObjectURL(blob);
+   pack[path.toLowerCase()]=URL.createObjectURL(blob);
   }
  }));
 
+ return pack;
+}
+
+function getTexture(name){
+ name=name.toLowerCase();
+
+ const overlayKey=Object.keys(overlayPack).find(p=>p.includes(name));
+ if(overlayKey) return overlayPack[overlayKey];
+
+ const baseKey=Object.keys(basePack).find(p=>p.includes(name));
+ if(baseKey) return basePack[baseKey];
+
+ return null;
+}
+
+document.getElementById('baseInput').addEventListener('change',async(e)=>{
+ basePack=await loadPack(e.target.files[0]);
+ renderAll();
+});
+
+document.getElementById('overlayInput').addEventListener('change',async(e)=>{
+ overlayPack=await loadPack(e.target.files[0]);
+ renderAll();
+});
+
+function renderAll(){
  renderMenu();
  renderInventory();
  renderHUD();
-});
+}
 
 function renderMenu(){
  const menu=document.getElementById('menuContent');
  menu.innerHTML='';
+
+ const bg=getTexture('background')||getTexture('panorama');
+ if(bg){
+  const img=document.createElement('img');
+  img.src=bg;
+  img.className='bg';
+  menu.appendChild(img);
+ }
+
  ['Play','Settings','Marketplace'].forEach(txt=>{
   const btn=document.createElement('button');
   btn.textContent=txt;
@@ -79,9 +122,21 @@ function renderMenu(){
 function renderInventory(){
  const grid=document.getElementById('inventoryGrid');
  grid.innerHTML='';
+
+ const slotTex=getTexture('slot');
+
  for(let i=0;i<27;i++){
   const slot=document.createElement('div');
   slot.className='slot';
+
+  if(slotTex){
+   const img=document.createElement('img');
+   img.src=slotTex;
+   slot.appendChild(img);
+  } else {
+   slot.style.border='1px solid #777';
+  }
+
   grid.appendChild(slot);
  }
 }
@@ -89,9 +144,21 @@ function renderInventory(){
 function renderHUD(){
  const bar=document.getElementById('hudBar');
  bar.innerHTML='';
+
+ const hotbar=getTexture('hotbar');
+
  for(let i=0;i<9;i++){
   const slot=document.createElement('div');
   slot.className='hudSlot';
+
+  if(hotbar){
+   const img=document.createElement('img');
+   img.src=hotbar;
+   slot.appendChild(img);
+  } else {
+   slot.style.border='1px solid #aaa';
+  }
+
   bar.appendChild(slot);
  }
 }
