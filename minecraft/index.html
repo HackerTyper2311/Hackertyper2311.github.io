@@ -2,166 +2,126 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Minecraft UI Simulator v3</title>
+<title>Minecraft UI Simulator v4</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 body{background:#111;color:white;font-family:sans-serif;text-align:center}
 #controls{margin:10px}
 button{margin:5px;padding:8px 16px;background:#222;color:white;border:1px solid #555;cursor:pointer}
-.screen{display:none;border:2px solid #444;margin:10px;padding:10px}
+.screen{display:none;border:2px solid #444;margin:10px;padding:10px;position:relative}
 .active{display:block}
-.grid{display:grid;grid-template-columns:repeat(9,40px);gap:4px;justify-content:center}
-.slot{width:40px;height:40px;position:relative}
-.slot img{width:100%;height:100%;image-rendering:pixelated}
-#hudBar{display:flex;justify-content:center;margin-top:20px}
-.hudSlot{width:40px;height:40px;margin:2px}
-.hudSlot img{width:100%;height:100%;image-rendering:pixelated}
-.bg{width:320px;height:180px;object-fit:cover;margin:auto;display:block}
+.ui-element{position:absolute}
 </style>
 </head>
 <body>
-<h1>🧱 Minecraft UI Simulator v3</h1>
+<h1>🧱 Minecraft UI Simulator v4</h1>
 
 <input type="file" id="baseInput" accept=".zip">
-<p>Base pack (bedrock samples)</p>
+<p>Base pack</p>
 
 <input type="file" id="overlayInput" accept=".mcpack,.zip">
 <p>Overlay pack</p>
 
 <div id="controls">
-<button onclick="showScreen('menu')">Main Menu</button>
-<button onclick="showScreen('inventory')">Inventory</button>
-<button onclick="showScreen('hud')">HUD</button>
+<button onclick="loadUIScreen('main_menu')">Main Menu</button>
+<button onclick="loadUIScreen('inventory_screen')">Inventory</button>
+<button onclick="loadUIScreen('hud_screen')">HUD</button>
 </div>
 
-<div id="menu" class="screen active">
-<h2>Main Menu</h2>
-<div id="menuContent"></div>
-</div>
-
-<div id="inventory" class="screen">
-<h2>Inventory</h2>
-<div class="grid" id="inventoryGrid"></div>
-</div>
-
-<div id="hud" class="screen">
-<h2>HUD</h2>
-<div id="hudBar"></div>
-</div>
+<div id="uiRoot" class="screen active"></div>
 
 <script>
-let basePack={};
-let overlayPack={};
-
-function showScreen(id){
- document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
- document.getElementById(id).classList.add('active');
-}
+let basePack={}, overlayPack={}, uiFiles={};
 
 async function loadPack(file){
  const zip=await JSZip.loadAsync(file);
  let pack={};
 
  await Promise.all(Object.keys(zip.files).map(async(path)=>{
-  if(path.endsWith('.png')){
+  const lower=path.toLowerCase();
+
+  if(lower.endsWith('.png')){
    const blob=await zip.files[path].async('blob');
-   pack[path.toLowerCase()]=URL.createObjectURL(blob);
+   pack[lower]=URL.createObjectURL(blob);
+  }
+
+  if(lower.includes('ui/') && lower.endsWith('.json')){
+   const text=await zip.files[path].async('text');
+   uiFiles[lower]=JSON.parse(text);
   }
  }));
 
  return pack;
 }
 
-function getTexture(name){
- name=name.toLowerCase();
+function getTexture(path){
+ path=path.toLowerCase();
+ return overlayPack[path] || basePack[path] || null;
+}
 
- const overlayKey=Object.keys(overlayPack).find(p=>p.includes(name));
- if(overlayKey) return overlayPack[overlayKey];
+function loadUIScreen(name){
+ const root=document.getElementById('uiRoot');
+ root.innerHTML='';
 
- const baseKey=Object.keys(basePack).find(p=>p.includes(name));
- if(baseKey) return basePack[baseKey];
+ const fileKey=Object.keys(uiFiles).find(k=>k.includes(name));
+ if(!fileKey){
+  root.innerHTML='UI JSON not found';
+  return;
+ }
 
- return null;
+ const json=uiFiles[fileKey];
+ renderJSON(json, root);
+}
+
+function renderJSON(obj, parent){
+ for(const key in obj){
+  const el=obj[key];
+
+  const div=document.createElement('div');
+  div.className='ui-element';
+
+  if(el.texture){
+   const img=document.createElement('img');
+   img.src=getTexture(el.texture) || '';
+   img.style.width='100px';
+   div.appendChild(img);
+  }
+
+  if(el.text){
+   div.textContent=el.text;
+  }
+
+  if(el.position){
+   div.style.left=(el.position[0]||0)+'px';
+   div.style.top=(el.position[1]||0)+'px';
+  }
+
+  if(el.size){
+   div.style.width=el.size[0]+'px';
+   div.style.height=el.size[1]+'px';
+  }
+
+  if(el.type==='button'){
+   div.style.border='1px solid white';
+   div.style.cursor='pointer';
+   div.onclick=()=>alert('Clicked '+key);
+  }
+
+  parent.appendChild(div);
+
+  if(typeof el==='object'){
+   renderJSON(el, div);
+  }
+ }
 }
 
 document.getElementById('baseInput').addEventListener('change',async(e)=>{
  basePack=await loadPack(e.target.files[0]);
- renderAll();
 });
 
 document.getElementById('overlayInput').addEventListener('change',async(e)=>{
  overlayPack=await loadPack(e.target.files[0]);
- renderAll();
 });
-
-function renderAll(){
- renderMenu();
- renderInventory();
- renderHUD();
-}
-
-function renderMenu(){
- const menu=document.getElementById('menuContent');
- menu.innerHTML='';
-
- const bg=getTexture('background')||getTexture('panorama');
- if(bg){
-  const img=document.createElement('img');
-  img.src=bg;
-  img.className='bg';
-  menu.appendChild(img);
- }
-
- ['Play','Settings','Marketplace'].forEach(txt=>{
-  const btn=document.createElement('button');
-  btn.textContent=txt;
-  menu.appendChild(btn);
- });
-}
-
-function renderInventory(){
- const grid=document.getElementById('inventoryGrid');
- grid.innerHTML='';
-
- const slotTex=getTexture('slot');
-
- for(let i=0;i<27;i++){
-  const slot=document.createElement('div');
-  slot.className='slot';
-
-  if(slotTex){
-   const img=document.createElement('img');
-   img.src=slotTex;
-   slot.appendChild(img);
-  } else {
-   slot.style.border='1px solid #777';
-  }
-
-  grid.appendChild(slot);
- }
-}
-
-function renderHUD(){
- const bar=document.getElementById('hudBar');
- bar.innerHTML='';
-
- const hotbar=getTexture('hotbar');
-
- for(let i=0;i<9;i++){
-  const slot=document.createElement('div');
-  slot.className='hudSlot';
-
-  if(hotbar){
-   const img=document.createElement('img');
-   img.src=hotbar;
-   slot.appendChild(img);
-  } else {
-   slot.style.border='1px solid #aaa';
-  }
-
-  bar.appendChild(slot);
- }
-}
 </script>
 </body>
 </html>
