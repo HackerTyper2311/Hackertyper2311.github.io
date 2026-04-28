@@ -2,79 +2,99 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<title>Minecraft UI Viewer</title>
+<title>Minecraft UI Simulator</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 body{background:#111;color:white;font-family:sans-serif;text-align:center}
-#menu{margin-top:20px}
-#viewer{display:grid;grid-template-columns:repeat(auto-fill,100px);gap:10px;padding:20px}
-img{width:100%;image-rendering:pixelated}
-.screen{border:2px solid #444;padding:10px;margin:10px}
-button{display:block;margin:5px auto;padding:8px 16px;background:#222;color:white;border:1px solid #555;cursor:pointer}
+#controls{margin:10px}
+button{margin:5px;padding:8px 16px;background:#222;color:white;border:1px solid #555;cursor:pointer}
+.screen{display:none;border:2px solid #444;margin:10px;padding:10px}
+.active{display:block}
+.grid{display:grid;grid-template-columns:repeat(9,40px);gap:4px;justify-content:center}
+.slot{width:40px;height:40px;border:1px solid #777}
+#hudBar{display:flex;justify-content:center;margin-top:20px}
+.hudSlot{width:40px;height:40px;border:1px solid #aaa;margin:2px}
 </style>
 </head>
 <body>
-<h1>🧱 Minecraft UI + Texture Viewer</h1>
+<h1>🧱 Minecraft UI Simulator</h1>
 <input type="file" id="fileInput" accept=".mcpack,.zip">
 
-<div id="menu" class="screen">
-<h2>Main Menu Preview (non-playable)</h2>
-<div id="mainMenu"></div>
+<div id="controls">
+<button onclick="showScreen('menu')">Main Menu</button>
+<button onclick="showScreen('inventory')">Inventory</button>
+<button onclick="showScreen('hud')">HUD</button>
 </div>
 
-<div id="viewer"></div>
+<div id="menu" class="screen active">
+<h2>Main Menu</h2>
+<div id="menuContent"></div>
+</div>
+
+<div id="inventory" class="screen">
+<h2>Inventory</h2>
+<div class="grid" id="inventoryGrid"></div>
+</div>
+
+<div id="hud" class="screen">
+<h2>HUD</h2>
+<div id="hudBar"></div>
+</div>
 
 <script>
-const fileInput=document.getElementById('fileInput');
-fileInput.addEventListener('change',async(e)=>{
-const file=e.target.files[0];
-const zip=await JSZip.loadAsync(file);
-const viewer=document.getElementById('viewer');
-const menu=document.getElementById('mainMenu');
-viewer.innerHTML="";
-menu.innerHTML="Loading UI...";
-
 let textures={};
 
-await Promise.all(Object.keys(zip.files).map(async(path)=>{
-if(path.endsWith('.png')){
-const blob=await zip.files[path].async('blob');
-textures[path]=URL.createObjectURL(blob);
-}
-}));
-
-// texture grid
-for(let path in textures){
-const div=document.createElement('div');
-const img=document.createElement('img');
-img.src=textures[path];
-const label=document.createElement('div');
-label.textContent=path;
-div.appendChild(img);
-div.appendChild(label);
-viewer.appendChild(div);
+function showScreen(id){
+ document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+ document.getElementById(id).classList.add('active');
 }
 
-// main menu mock
-menu.innerHTML="";
-const container=document.createElement('div');
-container.style.width='320px';
-container.style.margin='auto';
-container.style.border='2px solid #666';
-container.style.padding='10px';
+document.getElementById('fileInput').addEventListener('change',async(e)=>{
+ const file=e.target.files[0];
+ const zip=await JSZip.loadAsync(file);
+ textures={};
 
-const title=document.createElement('h3');
-title.textContent='Minecraft';
-container.appendChild(title);
+ await Promise.all(Object.keys(zip.files).map(async(path)=>{
+  if(path.endsWith('.png')){
+   const blob=await zip.files[path].async('blob');
+   textures[path]=URL.createObjectURL(blob);
+  }
+ }));
 
-['Play','Settings','Marketplace'].forEach(txt=>{
-const btn=document.createElement('button');
-btn.textContent=txt;
-container.appendChild(btn);
+ renderMenu();
+ renderInventory();
+ renderHUD();
 });
 
-menu.appendChild(container);
-});
+function renderMenu(){
+ const menu=document.getElementById('menuContent');
+ menu.innerHTML='';
+ ['Play','Settings','Marketplace'].forEach(txt=>{
+  const btn=document.createElement('button');
+  btn.textContent=txt;
+  menu.appendChild(btn);
+ });
+}
+
+function renderInventory(){
+ const grid=document.getElementById('inventoryGrid');
+ grid.innerHTML='';
+ for(let i=0;i<27;i++){
+  const slot=document.createElement('div');
+  slot.className='slot';
+  grid.appendChild(slot);
+ }
+}
+
+function renderHUD(){
+ const bar=document.getElementById('hudBar');
+ bar.innerHTML='';
+ for(let i=0;i<9;i++){
+  const slot=document.createElement('div');
+  slot.className='hudSlot';
+  bar.appendChild(slot);
+ }
+}
 </script>
 </body>
 </html>
