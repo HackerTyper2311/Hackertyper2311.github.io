@@ -2,10 +2,17 @@
 <html lang="nl">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
   <title>Gyro Target Game</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #111; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: #111;
+      height: 100%;
+    }
+
     #startBtn {
       position: absolute;
       top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -13,15 +20,28 @@
       background: #0f62fe; border: none; border-radius: 10px; color: white;
       z-index: 10;
     }
+
     #hud {
-      position: absolute; top: 10px; left: 10px; color: white;
-      font-size: 16px; z-index: 10;
+      position: absolute;
+      top: env(safe-area-inset-top, 10px);
+      left: 10px;
+      color: white;
+      font-size: 16px;
+      z-index: 10;
     }
-    canvas { display: block; }
+
+    canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+    }
   </style>
 </head>
 <body>
-<button id="startBtn">Start</button>
+<button id="startBtn">Start Fullscreen</button>
 <div id="hud">Score: 0</div>
 <canvas id="game"></canvas>
 
@@ -56,11 +76,9 @@ function update() {
   ball.x += ball.vx;
   ball.y += ball.vy;
 
-  // keep in screen
   ball.x = Math.max(ball.r, Math.min(canvas.width - ball.r, ball.x));
   ball.y = Math.max(ball.r, Math.min(canvas.height - ball.r, ball.y));
 
-  // hit detection
   const dx = ball.x - target.x;
   const dy = ball.y - target.y;
   const dist = Math.sqrt(dx*dx + dy*dy);
@@ -68,6 +86,29 @@ function update() {
   if (dist < ball.r + target.r) {
     score++;
     document.getElementById("hud").innerText = "Score: " + score;
+
+    // 📳 VIBRATION (if supported)
+    if (navigator.vibrate) {
+      navigator.vibrate(100); // 100ms buzz
+    }
+
+    // 🔥 SCREEN SHAKE EFFECT
+    let shakeTime = 10;
+    const originalTransform = canvas.style.transform;
+
+    function shake() {
+      if (shakeTime > 0) {
+        const dx = (Math.random() - 0.5) * 10;
+        const dy = (Math.random() - 0.5) * 10;
+        canvas.style.transform = `translate(${dx}px, ${dy}px)`;
+        shakeTime--;
+        requestAnimationFrame(shake);
+      } else {
+        canvas.style.transform = originalTransform;
+      }
+    }
+    shake();
+
     newTarget();
   }
 }
@@ -76,13 +117,11 @@ function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // target
   ctx.beginPath();
   ctx.arc(target.x, target.y, target.r, 0, Math.PI*2);
   ctx.fillStyle = "red";
   ctx.fill();
 
-  // ball
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
   ctx.fillStyle = "lime";
@@ -96,12 +135,18 @@ function loop() {
 }
 
 function handleOrientation(event) {
-  tiltX = event.gamma || 0;
-  tiltY = event.beta || 0;
+  tiltX = (event.gamma || 0) / 10;
+  tiltY = (event.beta || 0) / 10;
 }
 
 async function startGame() {
   try {
+    // FULLSCREEN
+    if (document.documentElement.requestFullscreen) {
+      await document.documentElement.requestFullscreen();
+    }
+
+    // GYRO PERMISSION (iOS)
     if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
       const permission = await DeviceOrientationEvent.requestPermission();
       if (permission !== 'granted') {
