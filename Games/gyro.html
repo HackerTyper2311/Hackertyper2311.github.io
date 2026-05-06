@@ -69,6 +69,7 @@ let rafId = null; // track animation frame to prevent duplicate loops
 let timer = 10;
 let lastHitTime = 0;
 let gameOver = false;
+let wakeLock = null;
 
 function newTarget() {
   target.x = Math.random() * (canvas.width - 100) + 50;
@@ -130,21 +131,31 @@ function draw() {
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   if (gameOver) {
-    // Game over screen
-    ctx.fillStyle = "white";
-    ctx.textAlign = "center";
-    ctx.font = "bold 48px sans-serif";
-    ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2 - 40);
-    ctx.font = "32px sans-serif";
-    ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 10);
-    ctx.font = "20px sans-serif";
-    ctx.fillStyle = "#aaa";
-    ctx.fillText("Press Start to play again", canvas.width / 2, canvas.height / 2 + 55);
-    ctx.textAlign = "left";
+    const cx = canvas.width / 2;
+    const cy = canvas.height / 2;
 
-    // Show start button, hide stop
-    document.getElementById("startBtn").style.display = "block";
-    document.getElementById("stopBtn").style.display = "none";
+    ctx.textAlign = "center";
+
+    ctx.fillStyle = "white";
+    ctx.font = "bold 48px sans-serif";
+    ctx.fillText("Game Over", cx, cy - 60);
+
+    ctx.font = "32px sans-serif";
+    ctx.fillText("Score: " + score, cx, cy);
+
+    // Draw a tap-to-restart button on canvas
+    const btnW = 220, btnH = 54, btnR = 12;
+    const btnX = cx - btnW / 2;
+    const btnY = cy + 30;
+    ctx.fillStyle = "#0f62fe";
+    ctx.beginPath();
+    ctx.roundRect(btnX, btnY, btnW, btnH, btnR);
+    ctx.fill();
+    ctx.fillStyle = "white";
+    ctx.font = "bold 22px sans-serif";
+    ctx.fillText("Tap to Play Again", cx, btnY + 35);
+
+    ctx.textAlign = "left";
     running = false;
     return;
   }
@@ -183,6 +194,16 @@ async function startGame() {
     const el = document.documentElement;
     if (el.requestFullscreen) await el.requestFullscreen();
 
+    // Lock to portrait
+    try {
+      await screen.orientation.lock("portrait");
+    } catch (e) { /* not supported on all browsers */ }
+
+    // Keep screen awake
+    try {
+      wakeLock = await navigator.wakeLock.request("screen");
+    } catch (e) { /* not supported on all browsers */ }
+
     window.addEventListener("deviceorientation", handleOrientation);
 
     document.getElementById("startBtn").style.display = "none";
@@ -210,12 +231,26 @@ function stopGame() {
     cancelAnimationFrame(rafId);
     rafId = null;
   }
+  if (wakeLock) { wakeLock.release(); wakeLock = null; }
+  try { screen.orientation.unlock(); } catch (e) {}
   document.getElementById("startBtn").style.display = "block";
   document.getElementById("stopBtn").style.display = "none";
 }
 
 document.getElementById("startBtn").onclick = startGame;
 document.getElementById("stopBtn").onclick = stopGame;
+
+// Re-acquire wake lock if tab becomes visible again while playing
+document.addEventListener("visibilitychange", async () => {
+  if (document.visibilityState === "visible" && running && !wakeLock) {
+    try { wakeLock = await navigator.wakeLock.request("screen"); } catch (e) {}
+  }
+});
+
+// Tap canvas to restart after game over
+canvas.addEventListener("pointerdown", () => {
+  if (gameOver) startGame();
+});
 </script>
 </body>
 </html>
