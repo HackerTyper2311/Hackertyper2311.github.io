@@ -61,8 +61,6 @@ let target = { x: 200, y: 200, r: 14 };
 let tiltX = 0, tiltY = 0;
 let score = 0;
 
-let shakeFrames = 0;
-
 function newTarget() {
   target.x = Math.random() * (canvas.width - 100) + 50;
   target.y = Math.random() * (canvas.height - 100) + 50;
@@ -89,45 +87,28 @@ function update() {
     score++;
     document.getElementById("hud").innerText = "Score: " + score;
 
-    // ANDROID VIBRATION (must be short + user gesture context)
-    if (navigator.vibrate) {
-      navigator.vibrate([50]);
-    }
-
-    // trigger shake
-    shakeFrames = 10;
+    // SIMPLE VIBRATION (best compatibility)
+    try {
+      navigator.vibrate && navigator.vibrate(50);
+    } catch {}
 
     newTarget();
   }
 }
 
 function draw() {
-  ctx.save();
-
-  // REAL SCREEN SHAKE (canvas transform inside draw loop)
-  if (shakeFrames > 0) {
-    const dx = (Math.random() - 0.5) * 10;
-    const dy = (Math.random() - 0.5) * 10;
-    ctx.translate(dx, dy);
-    shakeFrames--;
-  }
-
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // target
   ctx.beginPath();
   ctx.arc(target.x, target.y, target.r, 0, Math.PI*2);
   ctx.fillStyle = "red";
   ctx.fill();
 
-  // ball
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
   ctx.fillStyle = "lime";
   ctx.fill();
-
-  ctx.restore();
 }
 
 function loop() {
@@ -143,9 +124,13 @@ function handleOrientation(event) {
 
 async function startGame() {
   try {
-    // TRY FULLSCREEN (Android Chrome works)
-    if (document.documentElement.requestFullscreen) {
-      await document.documentElement.requestFullscreen();
+    // FULLSCREEN (best effort)
+    const el = document.documentElement;
+    if (el.requestFullscreen) await el.requestFullscreen();
+
+    // Some Android browsers need this trick
+    if (screen.orientation && screen.orientation.lock) {
+      try { await screen.orientation.lock("portrait"); } catch {}
     }
 
     window.addEventListener("deviceorientation", handleOrientation);
