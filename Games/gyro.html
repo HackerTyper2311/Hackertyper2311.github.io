@@ -6,70 +6,185 @@
 <title>Gyro Target Game</title>
 
 <style>
+:root {
+  --glass: rgba(255,255,255,0.10);
+  --glass-border: rgba(255,255,255,0.18);
+  --text: #fff;
+  --accent: #0f62fe;
+}
+
 html, body {
   margin: 0;
   padding: 0;
   overflow: hidden;
-  background: #111;
+  background: #0b0b0f;
   height: 100%;
+  font-family: system-ui, sans-serif;
 }
 
+/* Canvas */
 canvas {
   position: fixed;
-  top: 0;
-  left: 0;
+  inset: 0;
   width: 100vw;
   height: 100vh;
-  display: block;
 }
 
-#startBtn, #stopBtn {
+/* SAFE AREA WRAPPER */
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* TOP HUD */
+#hudBar {
   position: absolute;
-  z-index: 10;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 10px;
+  align-items: center;
+
+  padding: 8px 14px;
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  border-radius: 999px;
+  color: var(--text);
+  backdrop-filter: blur(10px);
+  font-size: 14px;
+}
+
+/* TIMER BAR */
+#timerWrap {
+  position: absolute;
+  top: 60px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 70%;
+  height: 6px;
+  background: rgba(255,255,255,0.12);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+#timerBar {
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #00ff88, #ff3b3b);
+  transition: width 0.1s linear;
+}
+
+/* START SCREEN */
+#startOverlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: all;
 }
 
 #startBtn {
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  padding: 15px 25px;
+  padding: 16px 28px;
   font-size: 18px;
-  background: #0f62fe;
+  background: var(--accent);
   border: none;
-  border-radius: 10px;
+  border-radius: 14px;
   color: white;
+  font-weight: 600;
+}
+
+/* BOTTOM CONTROL BAR */
+#bottomBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+
+  display: flex;
+  justify-content: center;
+  gap: 12px;
+
+  padding: 14px;
+  padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  pointer-events: all;
+}
+
+.btn {
+  flex: 1;
+  max-width: 180px;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid var(--glass-border);
+  background: var(--glass);
+  color: white;
+  font-size: 16px;
+  backdrop-filter: blur(10px);
 }
 
 #stopBtn {
-  top: 10px;
-  right: 10px;
-  padding: 10px 15px;
-  font-size: 14px;
-  background: rgba(255,255,255,0.2);
-  border: 1px solid rgba(255,255,255,0.3);
-  border-radius: 8px;
-  color: white;
-  backdrop-filter: blur(5px);
   display: none;
 }
 
-#hud {
+/* GAME OVER */
+#gameOver {
   position: absolute;
-  top: 10px;
-  left: 10px;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   color: white;
-  font-size: 16px;
-  z-index: 10;
+  pointer-events: all;
+}
+
+.card {
+  background: var(--glass);
+  border: 1px solid var(--glass-border);
+  padding: 22px;
+  border-radius: 18px;
+  backdrop-filter: blur(12px);
 }
 </style>
 </head>
 
 <body>
 
-<button id="startBtn">Start</button>
-<button id="stopBtn">Stop</button>
-<div id="hud">Score: 0 | Time: 10.0</div>
 <canvas id="game"></canvas>
+
+<div id="ui">
+
+  <div id="hudBar">
+    <span id="score">Score: 0</span>
+    <span>•</span>
+    <span id="time">10.0</span>
+  </div>
+
+  <div id="timerWrap">
+    <div id="timerBar"></div>
+  </div>
+
+  <div id="bottomBar">
+    <button class="btn" id="stopBtn">Stop</button>
+  </div>
+
+</div>
+
+<div id="startOverlay">
+  <button id="startBtn">Start Game</button>
+</div>
+
+<div id="gameOver">
+  <div class="card">
+    <h2>Game Over</h2>
+    <p id="finalScore">Score: 0</p>
+    <button class="btn" id="restartBtn">Play Again</button>
+  </div>
+</div>
 
 <script>
 const canvas = document.getElementById("game");
@@ -96,6 +211,11 @@ let lastHitTime = 0;
 // Gyro
 let tiltX = 0, tiltY = 0;
 
+// UI
+const scoreEl = document.getElementById("score");
+const timeEl = document.getElementById("time");
+const timerBar = document.getElementById("timerBar");
+
 // Init
 function resetGame() {
   score = 0;
@@ -117,7 +237,7 @@ function resetGame() {
     r: 14
   };
 
-  updateHUD();
+  updateUI();
 }
 
 function newTarget() {
@@ -125,13 +245,16 @@ function newTarget() {
   target.y = Math.random() * (canvas.height - 100) + 50;
 }
 
-// HUD
-function updateHUD() {
-  document.getElementById("hud").innerText =
-    `Score: ${score} | Time: ${timer.toFixed(1)}`;
+// UI update
+function updateUI() {
+  scoreEl.textContent = `Score: ${score}`;
+  timeEl.textContent = timer.toFixed(1);
+
+  const pct = (timer / 10) * 100;
+  timerBar.style.width = pct + "%";
 }
 
-// Input (NO calibration, raw gyro)
+// Gyro
 function handleOrientation(event) {
   tiltX = (event.gamma || 0) / 10;
   tiltY = (event.beta || 0) / 10;
@@ -150,11 +273,9 @@ function update() {
   ball.x += ball.vx;
   ball.y += ball.vy;
 
-  // bounds
   ball.x = Math.max(ball.r, Math.min(canvas.width - ball.r, ball.x));
   ball.y = Math.max(ball.r, Math.min(canvas.height - ball.r, ball.y));
 
-  // collision
   const dx = ball.x - target.x;
   const dy = ball.y - target.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
@@ -163,60 +284,38 @@ function update() {
     score++;
     lastHitTime = Date.now();
     newTarget();
-    if (navigator.vibrate) navigator.vibrate(30);
+    if (navigator.vibrate) navigator.vibrate(25);
   }
 
-  // timer
   const elapsed = (Date.now() - lastHitTime) / 1000;
   timer = Math.max(0, 10 - elapsed);
 
-  if (timer <= 0) gameOver = true;
+  if (timer <= 0) {
+    endGame();
+  }
 
-  updateHUD();
+  updateUI();
 }
 
 // Draw
 function draw() {
-  ctx.fillStyle = "#111";
+  ctx.fillStyle = "#0b0b0f";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
   // target
-  const grad = ctx.createRadialGradient(
-    target.x, target.y, 2,
-    target.x, target.y, target.r
-  );
-  grad.addColorStop(0, "#ff6666");
-  grad.addColorStop(1, "#660000");
-
   ctx.beginPath();
   ctx.arc(target.x, target.y, target.r, 0, Math.PI * 2);
-  ctx.fillStyle = grad;
+  ctx.fillStyle = "#ff4d4d";
   ctx.fill();
 
-  // ball
+  // player
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
-  ctx.fillStyle = "lime";
+  ctx.fillStyle = "#00ff88";
   ctx.fill();
-
-  // game over
-  if (gameOver) {
-    ctx.fillStyle = "white";
-    ctx.textAlign = "center";
-
-    ctx.font = "bold 48px sans-serif";
-    ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2 - 40);
-
-    ctx.font = "32px sans-serif";
-    ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 10);
-
-    ctx.font = "20px sans-serif";
-    ctx.fillStyle = "#aaa";
-    ctx.fillText("Press Start to retry", canvas.width / 2, canvas.height / 2 + 55);
-  }
 }
 
-// Loop (fixed)
+// Loop
 function loop() {
   if (!running) return;
 
@@ -226,7 +325,18 @@ function loop() {
   rafId = requestAnimationFrame(loop);
 }
 
-// iOS gyro permission
+// Game end
+function endGame() {
+  running = false;
+  gameOver = true;
+
+  document.getElementById("gameOver").style.display = "flex";
+  document.getElementById("finalScore").textContent = `Score: ${score}`;
+
+  document.getElementById("stopBtn").style.display = "none";
+}
+
+// Gyro permission
 async function enableGyro() {
   if (typeof DeviceOrientationEvent !== "undefined" &&
       typeof DeviceOrientationEvent.requestPermission === "function") {
@@ -245,11 +355,12 @@ async function startGame() {
 
   await document.documentElement.requestFullscreen?.();
 
+  document.getElementById("startOverlay").style.display = "none";
+  document.getElementById("stopBtn").style.display = "block";
+  document.getElementById("gameOver").style.display = "none";
+
   tiltX = 0;
   tiltY = 0;
-
-  document.getElementById("startBtn").style.display = "none";
-  document.getElementById("stopBtn").style.display = "block";
 
   running = true;
   gameOver = false;
@@ -263,17 +374,17 @@ async function startGame() {
 // Stop
 function stopGame() {
   running = false;
-  gameOver = false;
 
   if (rafId) cancelAnimationFrame(rafId);
 
-  document.getElementById("startBtn").style.display = "block";
+  document.getElementById("startOverlay").style.display = "flex";
   document.getElementById("stopBtn").style.display = "none";
 }
 
 // Buttons
 document.getElementById("startBtn").onclick = startGame;
 document.getElementById("stopBtn").onclick = stopGame;
+document.getElementById("restartBtn").onclick = startGame;
 </script>
 
 </body>
