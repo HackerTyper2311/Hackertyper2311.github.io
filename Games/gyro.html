@@ -95,10 +95,8 @@ let lastHitTime = 0;
 
 // Gyro
 let tiltX = 0, tiltY = 0;
-let baseGamma = 0, baseBeta = 0;
-let calibrated = false;
 
-// Init objects
+// Init
 function resetGame() {
   score = 0;
   timer = 10;
@@ -133,30 +131,18 @@ function updateHUD() {
     `Score: ${score} | Time: ${timer.toFixed(1)}`;
 }
 
-// Input
+// Input (NO calibration, raw gyro)
 function handleOrientation(event) {
-  if (!calibrated) {
-    baseGamma = event.gamma || 0;
-    baseBeta = event.beta || 0;
-    calibrated = true;
-  }
-
-  let gx = (event.gamma || 0) - baseGamma;
-  let gy = (event.beta || 0) - baseBeta;
-
-  // smoothing
-  tiltX = tiltX * 0.8 + (gx / 10) * 0.2;
-  tiltY = tiltY * 0.8 + (gy / 10) * 0.2;
+  tiltX = (event.gamma || 0) / 10;
+  tiltY = (event.beta || 0) / 10;
 }
 
-// Update logic
+// Update
 function update() {
   if (!running || gameOver) return;
 
-  const difficulty = 0.5 + score * 0.02;
-
-  ball.vx += tiltX * difficulty;
-  ball.vy += tiltY * difficulty;
+  ball.vx += tiltX * 0.5;
+  ball.vy += tiltY * 0.5;
 
   ball.vx *= 0.94;
   ball.vy *= 0.94;
@@ -180,18 +166,16 @@ function update() {
     if (navigator.vibrate) navigator.vibrate(30);
   }
 
-  // timer (true survival mode)
+  // timer
   const elapsed = (Date.now() - lastHitTime) / 1000;
   timer = Math.max(0, 10 - elapsed);
 
-  if (timer <= 0) {
-    gameOver = true;
-  }
+  if (timer <= 0) gameOver = true;
 
   updateHUD();
 }
 
-// Render
+// Draw
 function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -232,7 +216,7 @@ function draw() {
   }
 }
 
-// Loop (FIXED)
+// Loop (fixed)
 function loop() {
   if (!running) return;
 
@@ -242,13 +226,14 @@ function loop() {
   rafId = requestAnimationFrame(loop);
 }
 
-// iOS permission support
+// iOS gyro permission
 async function enableGyro() {
   if (typeof DeviceOrientationEvent !== "undefined" &&
       typeof DeviceOrientationEvent.requestPermission === "function") {
     const res = await DeviceOrientationEvent.requestPermission();
     if (res !== "granted") return false;
   }
+
   window.addEventListener("deviceorientation", handleOrientation);
   return true;
 }
@@ -260,7 +245,6 @@ async function startGame() {
 
   await document.documentElement.requestFullscreen?.();
 
-  calibrated = false;
   tiltX = 0;
   tiltY = 0;
 
