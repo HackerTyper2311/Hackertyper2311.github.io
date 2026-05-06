@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Games</title>
+<style>
+body {
+  margin:0;
+  font-family: system-ui, sans-serif;
+  background:#0b0b0f;
+  color:white;
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  height:100vh;
+}
+
+h1 {
+  margin-bottom:20px;
+}
+
+.grid {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap:20px;
+  width:90%;
+  max-width:600px;
+}
+
+.card {
+  background: rgba(255,255,255,0.08);
+  border:1px solid rgba(255,255,255,0.15);
+  padding:20px;
+  border-radius:16px;
+  text-align:center;
+  text-decoration:none;
+  color:white;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.card:hover {
+  transform: translateY(-5px);
+  background: rgba(255,255,255,0.15);
+}
+</style>
+</head>
+<body>
+
+<h1>🎮 My Games</h1>
+
+<div class="grid">
+  <a class="card" href="./gyro-ball/">
+    <h2>Gyro Ball</h2>
+    <p>Tilt your phone to hit targets</p>
+  </a>
+</div>
+
+</body>
+</html>
