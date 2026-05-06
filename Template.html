@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=\"UTF-8\">
+<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
+<title>AI Game</title>
+
+<style>
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  overflow: hidden;
+  background: #0b0b0f;
+  color: white;
+  font-family: system-ui;
+}
+
+canvas {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id=\"game\"></canvas>
+
+<script>
+const canvas = document.getElementById(\"game\");
+const ctx = canvas.getContext(\"2d\");
+
+function resize(){
+  canvas.width = innerWidth;
+  canvas.height = innerHeight;
+}
+resize();
+addEventListener(\"resize\", resize);
+
+function loop(){
+  ctx.fillStyle = \"#0b0b0f\";
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  requestAnimationFrame(loop);
+}
+loop();
+</script>
+
+</body>
+</html>"
+}}}
