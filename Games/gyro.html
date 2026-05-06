@@ -23,7 +23,7 @@
 
     #hud {
       position: absolute;
-      top: env(safe-area-inset-top, 10px);
+      top: 10px;
       left: 10px;
       color: white;
       font-size: 16px;
@@ -41,7 +41,7 @@
   </style>
 </head>
 <body>
-<button id="startBtn">Start Fullscreen</button>
+<button id="startBtn">Start</button>
 <div id="hud">Score: 0</div>
 <canvas id="game"></canvas>
 
@@ -60,6 +60,8 @@ let ball = { x: 100, y: 100, r: 12, vx: 0, vy: 0 };
 let target = { x: 200, y: 200, r: 14 };
 let tiltX = 0, tiltY = 0;
 let score = 0;
+
+let shakeFrames = 0;
 
 function newTarget() {
   target.x = Math.random() * (canvas.width - 100) + 50;
@@ -87,45 +89,45 @@ function update() {
     score++;
     document.getElementById("hud").innerText = "Score: " + score;
 
-    // 📳 VIBRATION (if supported)
+    // ANDROID VIBRATION (must be short + user gesture context)
     if (navigator.vibrate) {
-      navigator.vibrate(100); // 100ms buzz
+      navigator.vibrate([50]);
     }
 
-    // 🔥 SCREEN SHAKE EFFECT
-    let shakeTime = 10;
-    const originalTransform = canvas.style.transform;
-
-    function shake() {
-      if (shakeTime > 0) {
-        const dx = (Math.random() - 0.5) * 10;
-        const dy = (Math.random() - 0.5) * 10;
-        canvas.style.transform = `translate(${dx}px, ${dy}px)`;
-        shakeTime--;
-        requestAnimationFrame(shake);
-      } else {
-        canvas.style.transform = originalTransform;
-      }
-    }
-    shake();
+    // trigger shake
+    shakeFrames = 10;
 
     newTarget();
   }
 }
 
 function draw() {
+  ctx.save();
+
+  // REAL SCREEN SHAKE (canvas transform inside draw loop)
+  if (shakeFrames > 0) {
+    const dx = (Math.random() - 0.5) * 10;
+    const dy = (Math.random() - 0.5) * 10;
+    ctx.translate(dx, dy);
+    shakeFrames--;
+  }
+
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // target
   ctx.beginPath();
   ctx.arc(target.x, target.y, target.r, 0, Math.PI*2);
   ctx.fillStyle = "red";
   ctx.fill();
 
+  // ball
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
   ctx.fillStyle = "lime";
   ctx.fill();
+
+  ctx.restore();
 }
 
 function loop() {
@@ -141,18 +143,9 @@ function handleOrientation(event) {
 
 async function startGame() {
   try {
-    // FULLSCREEN
+    // TRY FULLSCREEN (Android Chrome works)
     if (document.documentElement.requestFullscreen) {
       await document.documentElement.requestFullscreen();
-    }
-
-    // GYRO PERMISSION (iOS)
-    if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
-      const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission !== 'granted') {
-        alert("Gyro permission denied");
-        return;
-      }
     }
 
     window.addEventListener("deviceorientation", handleOrientation);
