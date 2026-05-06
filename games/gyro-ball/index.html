@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Gyro Ball</title>
+
+<style>
+:root { --glass: rgba(255,255,255,0.10); --glass-border: rgba(255,255,255,0.18); --text:#fff; --accent:#0f62fe; }
+html,body{margin:0;padding:0;overflow:hidden;background:#0b0b0f;height:100%;font-family:system-ui,sans-serif;}
+canvas{position:fixed;inset:0;width:100vw;height:100vh;}
+#ui{position:fixed;inset:0;pointer-events:none;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);}
+#hudBar{position:absolute;top:12px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;padding:8px 14px;background:var(--glass);border:1px solid var(--glass-border);border-radius:999px;color:var(--text);backdrop-filter:blur(10px);font-size:14px;}
+#timerWrap{position:absolute;top:60px;left:50%;transform:translateX(-50%);width:70%;height:6px;background:rgba(255,255,255,0.12);border-radius:999px;overflow:hidden;}
+#timerBar{height:100%;width:100%;background:linear-gradient(90deg,#00ff88,#ff3b3b);transition:width 0.1s linear;}
+#startOverlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:all;}
+#startBtn{padding:16px 28px;font-size:18px;background:var(--accent);border:none;border-radius:14px;color:white;font-weight:600;}
+#bottomBar{position:absolute;bottom:0;left:0;right:0;display:flex;justify-content:center;gap:12px;padding:14px;padding-bottom:calc(14px + env(safe-area-inset-bottom));pointer-events:all;}
+.btn{flex:1;max-width:180px;padding:14px;border-radius:14px;border:1px solid var(--glass-border);background:var(--glass);color:white;font-size:16px;backdrop-filter:blur(10px);}
+#stopBtn{display:none;}
+#gameOver{position:absolute;inset:0;display:none;align-items:center;justify-content:center;text-align:center;color:white;pointer-events:all;}
+.card{background:var(--glass);border:1px solid var(--glass-border);padding:22px;border-radius:18px;backdrop-filter:blur(12px);}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="ui"><div id="hudBar"><span id="score">Score: 0</span><span>•</span><span id="time">10.0</span></div><div id="timerWrap"><div id="timerBar"></div></div><div id="bottomBar"><button class="btn" id="stopBtn">Stop</button></div></div>
+<div id="startOverlay"><button id="startBtn">Start Game</button></div>
+<div id="gameOver"><div class="card"><h2>Game Over</h2><p id="finalScore">Score: 0</p><button class="btn" id="restartBtn">Play Again</button></div></div>
+<script>
+const canvas=document.getElementById("game");const ctx=canvas.getContext("2d");let wakeLock=null;async function enableWakeLock(){try{if('wakeLock'in navigator){wakeLock=await navigator.wakeLock.request('screen');}}catch(e){console.log(e);}}async function releaseWakeLock(){if(wakeLock){await wakeLock.release();wakeLock=null;}}document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&running){enableWakeLock();}});
+function resize(){canvas.width=innerWidth;canvas.height=innerHeight;}resize();addEventListener("resize",resize);
+let ball,target,score=0,running=false,rafId=null,gameOver=false,timer=10,lastHitTime=0,tiltX=0,tiltY=0;
+const scoreEl=document.getElementById("score"),timeEl=document.getElementById("time"),timerBar=document.getElementById("timerBar");
+function resetGame(){score=0;timer=10;gameOver=false;lastHitTime=Date.now();ball={x:canvas.width/2,y:canvas.height/2,r:12,vx:0,vy:0};target={x:Math.random()*canvas.width,y:Math.random()*canvas.height,r:14};updateUI();}
+function newTarget(){target.x=Math.random()*(canvas.width-100)+50;target.y=Math.random()*(canvas.height-100)+50;}
+function updateUI(){scoreEl.textContent=`Score: ${score}`;timeEl.textContent=timer.toFixed(1);timerBar.style.width=((timer/10)*100)+"%";}
+function handleOrientation(e){tiltX=(e.gamma||0)/10;tiltY=(e.beta||0)/10;}
+function update(){if(!running||gameOver)return;ball.vx+=tiltX*0.5;ball.vy+=tiltY*0.5;ball.vx*=0.94;ball.vy*=0.94;ball.x+=ball.vx;ball.y+=ball.vy;ball.x=Math.max(ball.r,Math.min(canvas.width-ball.r,ball.x));ball.y=Math.max(ball.r,Math.min(canvas.height-ball.r,ball.y));const dx=ball.x-target.x,dy=ball.y-target.y;if(Math.sqrt(dx*dx+dy*dy)<ball.r+target.r){score++;lastHitTime=Date.now();newTarget();if(navigator.vibrate)navigator.vibrate(25);}const elapsed=(Date.now()-lastHitTime)/1000;timer=Math.max(0,10-elapsed);if(timer<=0)endGame();updateUI();}
+function draw(){ctx.fillStyle="#0b0b0f";ctx.fillRect(0,0,canvas.width,canvas.height);ctx.beginPath();ctx.arc(target.x,target.y,target.r,0,Math.PI*2);ctx.fillStyle="#ff4d4d";ctx.fill();ctx.beginPath();ctx.arc(ball.x,ball.y,ball.r,0,Math.PI*2);ctx.fillStyle="#00ff88";ctx.fill();}
+function loop(){if(!running)return;update();draw();rafId=requestAnimationFrame(loop);}function endGame(){running=false;gameOver=true;releaseWakeLock();document.getElementById("gameOver").style.display="flex";document.getElementById("finalScore").textContent=`Score: ${score}`;document.getElementById("stopBtn").style.display="none";}
+async function enableGyro(){if(typeof DeviceOrientationEvent!=="undefined"&&typeof DeviceOrientationEvent.requestPermission==="function"){const res=await DeviceOrientationEvent.requestPermission();if(res!=="granted")return false;}addEventListener("deviceorientation",handleOrientation);return true;}
+async function startGame(){const ok=await enableGyro();if(!ok)return;await document.documentElement.requestFullscreen?.();await enableWakeLock();document.getElementById("startOverlay").style.display="none";document.getElementById("stopBtn").style.display="block";document.getElementById("gameOver").style.display="none";tiltX=0;tiltY=0;running=true;gameOver=false;resetGame();if(rafId)cancelAnimationFrame(rafId);loop();}
+function stopGame(){running=false;if(rafId)cancelAnimationFrame(rafId);releaseWakeLock();document.getElementById("startOverlay").style.display="flex";document.getElementById("stopBtn").style.display="none";}
+document.getElementById("startBtn").onclick=startGame;document.getElementById("stopBtn").onclick=stopGame;document.getElementById("restartBtn").onclick=startGame;
+</script>
+</body>
+</html>
