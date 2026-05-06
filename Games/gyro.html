@@ -6,13 +6,11 @@
   <title>Gyro Target Game</title>
   <style>
     html, body {
-      margin: 0;
-      padding: 0;
+      margin: 0; padding: 0;
       overflow: hidden;
       background: #111;
       height: 100%;
     }
-
     #startBtn {
       position: absolute;
       top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -20,37 +18,26 @@
       background: #0f62fe; border: none; border-radius: 10px; color: white;
       z-index: 10;
     }
-
     #stopBtn {
       position: absolute;
-      top: 10px;
-      right: 10px;
-      padding: 10px 15px;
-      font-size: 14px;
+      top: 10px; right: 10px;
+      padding: 10px 15px; font-size: 14px;
       background: rgba(255,255,255,0.2);
       border: 1px solid rgba(255,255,255,0.3);
-      border-radius: 8px;
-      color: white;
+      border-radius: 8px; color: white;
       backdrop-filter: blur(5px);
-      z-index: 10;
-      display: none;
+      z-index: 10; display: none;
     }
-
     #hud {
       position: absolute;
-      top: 10px;
-      left: 10px;
-      color: white;
-      font-size: 16px;
+      top: 10px; left: 10px;
+      color: white; font-size: 16px;
       z-index: 10;
     }
-
     canvas {
       position: fixed;
-      top: 0;
-      left: 0;
-      width: 100vw;
-      height: 100vh;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
       display: block;
     }
   </style>
@@ -58,7 +45,7 @@
 <body>
 <button id="startBtn">Start</button>
 <button id="stopBtn">Stop</button>
-<div id="hud">Score: 0 | Time: 10</div>
+<div id="hud">Score: 0 | Time: 10.0</div>
 <canvas id="game"></canvas>
 
 <script>
@@ -77,9 +64,11 @@ let target = { x: 200, y: 200, r: 14 };
 let tiltX = 0, tiltY = 0;
 let score = 0;
 let running = false;
+let rafId = null; // track animation frame to prevent duplicate loops
 
-let timer = 10; // seconds
-let lastHitTime = Date.now();
+let timer = 10;
+let lastHitTime = 0;
+let gameOver = false;
 
 function newTarget() {
   target.x = Math.random() * (canvas.width - 100) + 50;
@@ -89,25 +78,24 @@ function newTarget() {
 function resetGame() {
   score = 0;
   timer = 10;
+  gameOver = false;
   lastHitTime = Date.now();
 
-  ball.x = canvas.width/2;
-  ball.y = canvas.height/2;
+  ball.x = canvas.width / 2;
+  ball.y = canvas.height / 2;
   ball.vx = ball.vy = 0;
 
-  document.getElementById("hud").innerText = "Score: 0 | Time: 10";
+  document.getElementById("hud").innerText = "Score: 0 | Time: 10.0";
   newTarget();
 }
 
 function update() {
-  if (!running) return;
+  if (!running || gameOver) return;
 
   ball.vx += tiltX * 0.5;
   ball.vy += tiltY * 0.5;
-
   ball.vx *= 0.94;
   ball.vy *= 0.94;
-
   ball.x += ball.vx;
   ball.y += ball.vy;
 
@@ -116,47 +104,63 @@ function update() {
 
   const dx = ball.x - target.x;
   const dy = ball.y - target.y;
-  const dist = Math.sqrt(dx*dx + dy*dy);
+  const dist = Math.sqrt(dx * dx + dy * dy);
 
-  // hit target
   if (dist < ball.r + target.r) {
     score++;
     lastHitTime = Date.now();
-
     if (navigator.vibrate) navigator.vibrate(30);
-
     newTarget();
   }
 
-  // timer countdown
-  let elapsed = (Date.now() - lastHitTime) / 1000;
+  // Timer counts down from last hit (or game start)
+  const elapsed = (Date.now() - lastHitTime) / 1000;
   timer = Math.max(0, 10 - elapsed);
-
-  if (timer <= 0) {
-    resetGame();
-  }
 
   document.getElementById("hud").innerText =
     "Score: " + score + " | Time: " + timer.toFixed(1);
+
+  if (timer <= 0) {
+    gameOver = true;
+  }
 }
 
 function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // target
+  if (gameOver) {
+    // Game over screen
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+    ctx.font = "bold 48px sans-serif";
+    ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2 - 40);
+    ctx.font = "32px sans-serif";
+    ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 10);
+    ctx.font = "20px sans-serif";
+    ctx.fillStyle = "#aaa";
+    ctx.fillText("Press Start to play again", canvas.width / 2, canvas.height / 2 + 55);
+    ctx.textAlign = "left";
+
+    // Show start button, hide stop
+    document.getElementById("startBtn").style.display = "block";
+    document.getElementById("stopBtn").style.display = "none";
+    running = false;
+    return;
+  }
+
+  // Draw target
   const gradient = ctx.createRadialGradient(target.x, target.y, 2, target.x, target.y, target.r);
   gradient.addColorStop(0, "#ff6666");
   gradient.addColorStop(1, "#660000");
-
   ctx.beginPath();
-  ctx.arc(target.x, target.y, target.r, 0, Math.PI*2);
+  ctx.arc(target.x, target.y, target.r, 0, Math.PI * 2);
   ctx.fillStyle = gradient;
   ctx.fill();
 
-  // ball
+  // Draw ball
   ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
   ctx.fillStyle = "lime";
   ctx.fill();
 }
@@ -164,7 +168,9 @@ function draw() {
 function loop() {
   update();
   draw();
-  requestAnimationFrame(loop);
+  if (running || gameOver) {
+    rafId = requestAnimationFrame(loop);
+  }
 }
 
 function handleOrientation(event) {
@@ -182,6 +188,12 @@ async function startGame() {
     document.getElementById("startBtn").style.display = "none";
     document.getElementById("stopBtn").style.display = "block";
 
+    // Cancel any existing loop before starting a new one
+    if (rafId) {
+      cancelAnimationFrame(rafId);
+      rafId = null;
+    }
+
     running = true;
     resetGame();
     loop();
@@ -193,6 +205,11 @@ async function startGame() {
 
 function stopGame() {
   running = false;
+  gameOver = false;
+  if (rafId) {
+    cancelAnimationFrame(rafId);
+    rafId = null;
+  }
   document.getElementById("startBtn").style.display = "block";
   document.getElementById("stopBtn").style.display = "none";
 }
