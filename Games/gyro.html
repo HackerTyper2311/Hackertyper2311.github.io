@@ -1,48 +1,71 @@
 <!DOCTYPE html>
 <html lang="nl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
-  <title>Gyro Target Game</title>
-  <style>
-    html, body {
-      margin: 0; padding: 0;
-      overflow: hidden;
-      background: #111;
-      height: 100%;
-    }
-    #startBtn {
-      position: absolute;
-      top: 50%; left: 50%; transform: translate(-50%, -50%);
-      padding: 15px 25px; font-size: 18px;
-      background: #0f62fe; border: none; border-radius: 10px; color: white;
-      z-index: 10;
-    }
-    #stopBtn {
-      position: absolute;
-      top: 10px; right: 10px;
-      padding: 10px 15px; font-size: 14px;
-      background: rgba(255,255,255,0.2);
-      border: 1px solid rgba(255,255,255,0.3);
-      border-radius: 8px; color: white;
-      backdrop-filter: blur(5px);
-      z-index: 10; display: none;
-    }
-    #hud {
-      position: absolute;
-      top: 10px; left: 10px;
-      color: white; font-size: 16px;
-      z-index: 10;
-    }
-    canvas {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100vw; height: 100vh;
-      display: block;
-    }
-  </style>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+<title>Gyro Target Game</title>
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  background: #111;
+  height: 100%;
+}
+
+canvas {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  display: block;
+}
+
+#startBtn, #stopBtn {
+  position: absolute;
+  z-index: 10;
+}
+
+#startBtn {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 15px 25px;
+  font-size: 18px;
+  background: #0f62fe;
+  border: none;
+  border-radius: 10px;
+  color: white;
+}
+
+#stopBtn {
+  top: 10px;
+  right: 10px;
+  padding: 10px 15px;
+  font-size: 14px;
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.3);
+  border-radius: 8px;
+  color: white;
+  backdrop-filter: blur(5px);
+  display: none;
+}
+
+#hud {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: white;
+  font-size: 16px;
+  z-index: 10;
+}
+</style>
 </head>
+
 <body>
+
 <button id="startBtn">Start</button>
 <button id="stopBtn">Stop</button>
 <div id="hud">Score: 0 | Time: 10.0</div>
@@ -59,49 +82,93 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
-let ball = { x: 100, y: 100, r: 12, vx: 0, vy: 0 };
-let target = { x: 200, y: 200, r: 14 };
-let tiltX = 0, tiltY = 0;
+// Game state
+let ball, target;
 let score = 0;
 let running = false;
-let rafId = null; // track animation frame to prevent duplicate loops
-
-let timer = 10;
-let lastHitTime = 0;
+let rafId = null;
 let gameOver = false;
 
-function newTarget() {
-  target.x = Math.random() * (canvas.width - 100) + 50;
-  target.y = Math.random() * (canvas.height - 100) + 50;
-}
+// Timer
+let timer = 10;
+let lastHitTime = 0;
 
+// Gyro
+let tiltX = 0, tiltY = 0;
+let baseGamma = 0, baseBeta = 0;
+let calibrated = false;
+
+// Init objects
 function resetGame() {
   score = 0;
   timer = 10;
   gameOver = false;
   lastHitTime = Date.now();
 
-  ball.x = canvas.width / 2;
-  ball.y = canvas.height / 2;
-  ball.vx = ball.vy = 0;
+  ball = {
+    x: canvas.width / 2,
+    y: canvas.height / 2,
+    r: 12,
+    vx: 0,
+    vy: 0
+  };
 
-  document.getElementById("hud").innerText = "Score: 0 | Time: 10.0";
-  newTarget();
+  target = {
+    x: Math.random() * canvas.width,
+    y: Math.random() * canvas.height,
+    r: 14
+  };
+
+  updateHUD();
 }
 
+function newTarget() {
+  target.x = Math.random() * (canvas.width - 100) + 50;
+  target.y = Math.random() * (canvas.height - 100) + 50;
+}
+
+// HUD
+function updateHUD() {
+  document.getElementById("hud").innerText =
+    `Score: ${score} | Time: ${timer.toFixed(1)}`;
+}
+
+// Input
+function handleOrientation(event) {
+  if (!calibrated) {
+    baseGamma = event.gamma || 0;
+    baseBeta = event.beta || 0;
+    calibrated = true;
+  }
+
+  let gx = (event.gamma || 0) - baseGamma;
+  let gy = (event.beta || 0) - baseBeta;
+
+  // smoothing
+  tiltX = tiltX * 0.8 + (gx / 10) * 0.2;
+  tiltY = tiltY * 0.8 + (gy / 10) * 0.2;
+}
+
+// Update logic
 function update() {
   if (!running || gameOver) return;
 
-  ball.vx += tiltX * 0.5;
-  ball.vy += tiltY * 0.5;
+  const difficulty = 0.5 + score * 0.02;
+
+  ball.vx += tiltX * difficulty;
+  ball.vy += tiltY * difficulty;
+
   ball.vx *= 0.94;
   ball.vy *= 0.94;
+
   ball.x += ball.vx;
   ball.y += ball.vy;
 
+  // bounds
   ball.x = Math.max(ball.r, Math.min(canvas.width - ball.r, ball.x));
   ball.y = Math.max(ball.r, Math.min(canvas.height - ball.r, ball.y));
 
+  // collision
   const dx = ball.x - target.x;
   const dy = ball.y - target.y;
   const dist = Math.sqrt(dx * dx + dy * dy);
@@ -109,113 +176,121 @@ function update() {
   if (dist < ball.r + target.r) {
     score++;
     lastHitTime = Date.now();
-    if (navigator.vibrate) navigator.vibrate(30);
     newTarget();
+    if (navigator.vibrate) navigator.vibrate(30);
   }
 
-  // Timer counts down from last hit (or game start)
+  // timer (true survival mode)
   const elapsed = (Date.now() - lastHitTime) / 1000;
   timer = Math.max(0, 10 - elapsed);
-
-  document.getElementById("hud").innerText =
-    "Score: " + score + " | Time: " + timer.toFixed(1);
 
   if (timer <= 0) {
     gameOver = true;
   }
+
+  updateHUD();
 }
 
+// Render
 function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  if (gameOver) {
-    // Game over screen
-    ctx.fillStyle = "white";
-    ctx.textAlign = "center";
-    ctx.font = "bold 48px sans-serif";
-    ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2 - 40);
-    ctx.font = "32px sans-serif";
-    ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 10);
-    ctx.font = "20px sans-serif";
-    ctx.fillStyle = "#aaa";
-    ctx.fillText("Press Start to play again", canvas.width / 2, canvas.height / 2 + 55);
-    ctx.textAlign = "left";
+  // target
+  const grad = ctx.createRadialGradient(
+    target.x, target.y, 2,
+    target.x, target.y, target.r
+  );
+  grad.addColorStop(0, "#ff6666");
+  grad.addColorStop(1, "#660000");
 
-    // Show start button, hide stop
-    document.getElementById("startBtn").style.display = "block";
-    document.getElementById("stopBtn").style.display = "none";
-    running = false;
-    return;
-  }
-
-  // Draw target
-  const gradient = ctx.createRadialGradient(target.x, target.y, 2, target.x, target.y, target.r);
-  gradient.addColorStop(0, "#ff6666");
-  gradient.addColorStop(1, "#660000");
   ctx.beginPath();
   ctx.arc(target.x, target.y, target.r, 0, Math.PI * 2);
-  ctx.fillStyle = gradient;
+  ctx.fillStyle = grad;
   ctx.fill();
 
-  // Draw ball
+  // ball
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
   ctx.fillStyle = "lime";
   ctx.fill();
+
+  // game over
+  if (gameOver) {
+    ctx.fillStyle = "white";
+    ctx.textAlign = "center";
+
+    ctx.font = "bold 48px sans-serif";
+    ctx.fillText("Game Over", canvas.width / 2, canvas.height / 2 - 40);
+
+    ctx.font = "32px sans-serif";
+    ctx.fillText("Score: " + score, canvas.width / 2, canvas.height / 2 + 10);
+
+    ctx.font = "20px sans-serif";
+    ctx.fillStyle = "#aaa";
+    ctx.fillText("Press Start to retry", canvas.width / 2, canvas.height / 2 + 55);
+  }
 }
 
+// Loop (FIXED)
 function loop() {
+  if (!running) return;
+
   update();
   draw();
-  if (running || gameOver) {
-    rafId = requestAnimationFrame(loop);
+
+  rafId = requestAnimationFrame(loop);
+}
+
+// iOS permission support
+async function enableGyro() {
+  if (typeof DeviceOrientationEvent !== "undefined" &&
+      typeof DeviceOrientationEvent.requestPermission === "function") {
+    const res = await DeviceOrientationEvent.requestPermission();
+    if (res !== "granted") return false;
   }
+  window.addEventListener("deviceorientation", handleOrientation);
+  return true;
 }
 
-function handleOrientation(event) {
-  tiltX = (event.gamma || 0) / 10;
-  tiltY = (event.beta || 0) / 10;
-}
-
+// Start
 async function startGame() {
-  try {
-    const el = document.documentElement;
-    if (el.requestFullscreen) await el.requestFullscreen();
+  const ok = await enableGyro();
+  if (!ok) return;
 
-    window.addEventListener("deviceorientation", handleOrientation);
+  await document.documentElement.requestFullscreen?.();
 
-    document.getElementById("startBtn").style.display = "none";
-    document.getElementById("stopBtn").style.display = "block";
+  calibrated = false;
+  tiltX = 0;
+  tiltY = 0;
 
-    // Cancel any existing loop before starting a new one
-    if (rafId) {
-      cancelAnimationFrame(rafId);
-      rafId = null;
-    }
+  document.getElementById("startBtn").style.display = "none";
+  document.getElementById("stopBtn").style.display = "block";
 
-    running = true;
-    resetGame();
-    loop();
+  running = true;
+  gameOver = false;
 
-  } catch (e) {
-    alert("Error: " + e);
-  }
+  resetGame();
+
+  if (rafId) cancelAnimationFrame(rafId);
+  loop();
 }
 
+// Stop
 function stopGame() {
   running = false;
   gameOver = false;
-  if (rafId) {
-    cancelAnimationFrame(rafId);
-    rafId = null;
-  }
+
+  if (rafId) cancelAnimationFrame(rafId);
+
   document.getElementById("startBtn").style.display = "block";
   document.getElementById("stopBtn").style.display = "none";
 }
 
+// Buttons
 document.getElementById("startBtn").onclick = startGame;
 document.getElementById("stopBtn").onclick = stopGame;
 </script>
+
 </body>
 </html>
