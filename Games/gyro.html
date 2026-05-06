@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gyro Maze Game</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #111; color: white; font-family: sans-serif; }
+    body { margin: 0; overflow: hidden; background: #111; }
     #startBtn {
       position: absolute;
       top: 50%; left: 50%; transform: translate(-50%, -50%);
@@ -16,7 +16,7 @@
   </style>
 </head>
 <body>
-<button id="startBtn">Start (geef gyro toestemming)</button>
+<button id="startBtn">Start</button>
 <canvas id="game"></canvas>
 
 <script>
@@ -25,61 +25,96 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let ball = { x: 50, y: 50, r: 10, vx: 0, vy: 0 };
+let ball = { x: 40, y: 40, r: 10, vx: 0, vy: 0 };
 let tiltX = 0, tiltY = 0;
 
-// simpele doolhof (muren)
-const walls = [
-  {x:100,y:0,w:20,h:300},
-  {x:200,y:200,w:20,h:300},
-  {x:300,y:0,w:20,h:300},
-  {x:400,y:200,w:20,h:300}
+// ECHT DOOLHOF (grid)
+const tile = 60;
+const maze = [
+  "1111111111",
+  "1000000001",
+  "1011111101",
+  "1010000101",
+  "1010110101",
+  "1010100101",
+  "1010111101",
+  "1000000001",
+  "1111111111"
 ];
 
-function collide(ball, wall) {
-  return ball.x + ball.r > wall.x &&
-         ball.x - ball.r < wall.x + wall.w &&
-         ball.y + ball.r > wall.y &&
-         ball.y - ball.r < wall.y + wall.h;
+function drawMaze() {
+  for (let y = 0; y < maze.length; y++) {
+    for (let x = 0; x < maze[y].length; x++) {
+      if (maze[y][x] === "1") {
+        ctx.fillStyle = "#555";
+        ctx.fillRect(x * tile, y * tile, tile, tile);
+      }
+    }
+  }
+}
+
+function isWall(x, y) {
+  let gridX = Math.floor(x / tile);
+  let gridY = Math.floor(y / tile);
+  return maze[gridY] && maze[gridY][gridX] === "1";
 }
 
 function update() {
-  ball.vx += tiltX * 0.2;
-  ball.vy += tiltY * 0.2;
+  ball.vx += tiltX * 0.3;
+  ball.vy += tiltY * 0.3;
 
-  ball.vx *= 0.98;
-  ball.vy *= 0.98;
+  ball.vx *= 0.95;
+  ball.vy *= 0.95;
 
-  ball.x += ball.vx;
-  ball.y += ball.vy;
+  let nextX = ball.x + ball.vx;
+  let nextY = ball.y + ball.vy;
 
-  // botsing met muren
-  for (let w of walls) {
-    if (collide(ball, w)) {
-      ball.vx *= -0.5;
-      ball.vy *= -0.5;
-    }
+  // collision X
+  if (!isWall(nextX + ball.r, ball.y) && !isWall(nextX - ball.r, ball.y)) {
+    ball.x = nextX;
+  } else {
+    ball.vx = 0;
   }
 
-  // rand van scherm
-  if (ball.x < ball.r) ball.x = ball.r;
-  if (ball.y < ball.r) ball.y = ball.r;
-  if (ball.x > canvas.width - ball.r) ball.x = canvas.width - ball.r;
-  if (ball.y > canvas.height - ball.r) ball.y = canvas.height - ball.r;
+  // collision Y
+  if (!isWall(ball.x, nextY + ball.r) && !isWall(ball.x, nextY - ball.r)) {
+    ball.y = nextY;
+  } else {
+    ball.vy = 0;
+  }
 }
 
 function draw() {
-  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // muren
-  ctx.fillStyle = "#444";
-  for (let w of walls) {
-    ctx.fillRect(w.x, w.y, w.w, w.h);
+  // borders met NOTCHES
+  ctx.strokeStyle = "#888";
+  ctx.lineWidth = 8;
+  ctx.beginPath();
+
+  for (let i = 0; i < canvas.width; i += 40) {
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i + 20, 0);
+
+    ctx.moveTo(i, canvas.height);
+    ctx.lineTo(i + 20, canvas.height);
   }
+
+  for (let i = 0; i < canvas.height; i += 40) {
+    ctx.moveTo(0, i);
+    ctx.lineTo(0, i + 20);
+
+    ctx.moveTo(canvas.width, i);
+    ctx.lineTo(canvas.width, i + 20);
+  }
+
+  ctx.stroke();
+
+  drawMaze();
 
   // bal
   ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
   ctx.fillStyle = "#0f0";
   ctx.fill();
 }
@@ -90,25 +125,19 @@ function loop() {
   requestAnimationFrame(loop);
 }
 
-// Gyro / tilt
 function handleOrientation(event) {
   tiltX = event.gamma / 10;
   tiltY = event.beta / 10;
 }
 
-// iOS toestemming
 async function startGame() {
   if (typeof DeviceOrientationEvent !== 'undefined' &&
       typeof DeviceOrientationEvent.requestPermission === 'function') {
-    try {
-      const permission = await DeviceOrientationEvent.requestPermission();
-      if (permission === 'granted') {
-        window.addEventListener("deviceorientation", handleOrientation);
-        document.getElementById("startBtn").style.display = "none";
-        loop();
-      }
-    } catch (e) {
-      alert("Gyro werkt niet: " + e);
+    const permission = await DeviceOrientationEvent.requestPermission();
+    if (permission === 'granted') {
+      window.addEventListener("deviceorientation", handleOrientation);
+      document.getElementById("startBtn").style.display = "none";
+      loop();
     }
   } else {
     window.addEventListener("deviceorientation", handleOrientation);
@@ -118,6 +147,4 @@ async function startGame() {
 }
 
 document.getElementById("startBtn").onclick = startGame;
-</script>
-</body>
-</html>
+</scri
