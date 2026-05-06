@@ -8,9 +8,7 @@
 <style>
 :root {
   --glass: rgba(255,255,255,0.10);
-  --glass-border: rgba(255,255,255,0.18);
-  --text: #fff;
-  --accent: #0f62fe;
+  --border: rgba(255,255,255,0.18);
 }
 
 html, body {
@@ -30,55 +28,53 @@ canvas {
   height: 100vh;
 }
 
-/* SAFE AREA WRAPPER */
+/* UI wrapper */
 #ui {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  padding: env(safe-area-inset-top) env(safe-area-inset-right)
-           env(safe-area-inset-bottom) env(safe-area-inset-left);
 }
 
-/* TOP HUD */
-#hudBar {
+/* LEFT HUD (landscape optimized) */
+#hud {
   position: absolute;
+  left: 12px;
   top: 12px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  gap: 10px;
-  align-items: center;
 
-  padding: 8px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+
+  padding: 10px;
   background: var(--glass);
-  border: 1px solid var(--glass-border);
-  border-radius: 999px;
-  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  color: white;
   backdrop-filter: blur(10px);
   font-size: 14px;
 }
 
-/* TIMER BAR */
+/* TIMER (vertical bar on right) */
 #timerWrap {
   position: absolute;
-  top: 60px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 70%;
-  height: 6px;
+  right: 12px;
+  top: 12px;
+  bottom: 12px;
+
+  width: 10px;
   background: rgba(255,255,255,0.12);
   border-radius: 999px;
   overflow: hidden;
 }
 
 #timerBar {
-  height: 100%;
   width: 100%;
-  background: linear-gradient(90deg, #00ff88, #ff3b3b);
-  transition: width 0.1s linear;
+  height: 100%;
+  background: linear-gradient(to top, #ff3b3b, #00ff88);
+  transition: height 0.1s linear;
 }
 
-/* START SCREEN */
+/* START OVERLAY */
 #startOverlay {
   position: absolute;
   inset: 0;
@@ -86,47 +82,24 @@ canvas {
   align-items: center;
   justify-content: center;
   pointer-events: all;
+  background: rgba(0,0,0,0.6);
 }
 
-#startBtn {
-  padding: 16px 28px;
-  font-size: 18px;
-  background: var(--accent);
-  border: none;
-  border-radius: 14px;
-  color: white;
-  font-weight: 600;
-}
-
-/* BOTTOM CONTROL BAR */
-#bottomBar {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-
-  display: flex;
-  justify-content: center;
-  gap: 12px;
-
-  padding: 14px;
-  padding-bottom: calc(14px + env(safe-area-inset-bottom));
-  pointer-events: all;
-}
-
-.btn {
-  flex: 1;
-  max-width: 180px;
-  padding: 14px;
-  border-radius: 14px;
-  border: 1px solid var(--glass-border);
-  background: var(--glass);
-  color: white;
+button {
+  padding: 14px 22px;
   font-size: 16px;
-  backdrop-filter: blur(10px);
+  border-radius: 14px;
+  border: none;
+  background: #0f62fe;
+  color: white;
 }
 
+/* STOP BUTTON */
 #stopBtn {
+  position: absolute;
+  bottom: 14px;
+  right: 14px;
+  pointer-events: all;
   display: none;
 }
 
@@ -137,17 +110,32 @@ canvas {
   display: none;
   align-items: center;
   justify-content: center;
-  text-align: center;
-  color: white;
   pointer-events: all;
+  background: rgba(0,0,0,0.6);
 }
 
 .card {
   background: var(--glass);
-  border: 1px solid var(--glass-border);
-  padding: 22px;
-  border-radius: 18px;
+  border: 1px solid var(--border);
+  padding: 20px;
+  border-radius: 16px;
+  text-align: center;
+  color: white;
   backdrop-filter: blur(12px);
+}
+
+/* PORTRAIT WARNING */
+#rotateWarning {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  background: black;
+  color: white;
+  font-size: 18px;
+  text-align: center;
+  padding: 20px;
 }
 </style>
 </head>
@@ -158,19 +146,16 @@ canvas {
 
 <div id="ui">
 
-  <div id="hudBar">
-    <span id="score">Score: 0</span>
-    <span>•</span>
-    <span id="time">10.0</span>
+  <div id="hud">
+    <div id="score">Score: 0</div>
+    <div id="time">10.0</div>
   </div>
 
   <div id="timerWrap">
     <div id="timerBar"></div>
   </div>
 
-  <div id="bottomBar">
-    <button class="btn" id="stopBtn">Stop</button>
-  </div>
+  <button id="stopBtn">Stop</button>
 
 </div>
 
@@ -182,8 +167,12 @@ canvas {
   <div class="card">
     <h2>Game Over</h2>
     <p id="finalScore">Score: 0</p>
-    <button class="btn" id="restartBtn">Play Again</button>
+    <button id="restartBtn">Play Again</button>
   </div>
+</div>
+
+<div id="rotateWarning">
+  Rotate your device to landscape mode 📱↻
 </div>
 
 <script>
@@ -197,18 +186,18 @@ function resize() {
 resize();
 window.addEventListener("resize", resize);
 
-// Game state
+// state
 let ball, target;
 let score = 0;
 let running = false;
 let rafId = null;
 let gameOver = false;
 
-// Timer
+// timer
 let timer = 10;
 let lastHitTime = 0;
 
-// Gyro
+// gyro
 let tiltX = 0, tiltY = 0;
 
 // UI
@@ -216,7 +205,19 @@ const scoreEl = document.getElementById("score");
 const timeEl = document.getElementById("time");
 const timerBar = document.getElementById("timerBar");
 
-// Init
+// portrait check
+function checkOrientation() {
+  const warn = document.getElementById("rotateWarning");
+  if (window.innerHeight > window.innerWidth) {
+    warn.style.display = "flex";
+  } else {
+    warn.style.display = "none";
+  }
+}
+window.addEventListener("resize", checkOrientation);
+checkOrientation();
+
+// init
 function resetGame() {
   score = 0;
   timer = 10;
@@ -241,26 +242,25 @@ function resetGame() {
 }
 
 function newTarget() {
-  target.x = Math.random() * (canvas.width - 100) + 50;
-  target.y = Math.random() * (canvas.height - 100) + 50;
+  target.x = Math.random() * (canvas.width - 80) + 40;
+  target.y = Math.random() * (canvas.height - 80) + 40;
 }
 
-// UI update
+// UI
 function updateUI() {
   scoreEl.textContent = `Score: ${score}`;
   timeEl.textContent = timer.toFixed(1);
 
-  const pct = (timer / 10) * 100;
-  timerBar.style.width = pct + "%";
+  timerBar.style.height = (timer / 10 * 100) + "%";
 }
 
-// Gyro
-function handleOrientation(event) {
-  tiltX = (event.gamma || 0) / 10;
-  tiltY = (event.beta || 0) / 10;
+// gyro
+function handleOrientation(e) {
+  tiltX = (e.gamma || 0) / 10;
+  tiltY = (e.beta || 0) / 10;
 }
 
-// Update
+// update
 function update() {
   if (!running || gameOver) return;
 
@@ -284,20 +284,17 @@ function update() {
     score++;
     lastHitTime = Date.now();
     newTarget();
-    if (navigator.vibrate) navigator.vibrate(25);
+    navigator.vibrate?.(20);
   }
 
-  const elapsed = (Date.now() - lastHitTime) / 1000;
-  timer = Math.max(0, 10 - elapsed);
+  timer = Math.max(0, 10 - (Date.now() - lastHitTime) / 1000);
 
-  if (timer <= 0) {
-    endGame();
-  }
+  if (timer <= 0) endGame();
 
   updateUI();
 }
 
-// Draw
+// draw
 function draw() {
   ctx.fillStyle = "#0b0b0f";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -308,14 +305,14 @@ function draw() {
   ctx.fillStyle = "#ff4d4d";
   ctx.fill();
 
-  // player
+  // ball
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
   ctx.fillStyle = "#00ff88";
   ctx.fill();
 }
 
-// Loop
+// loop
 function loop() {
   if (!running) return;
 
@@ -325,7 +322,7 @@ function loop() {
   rafId = requestAnimationFrame(loop);
 }
 
-// Game end
+// end
 function endGame() {
   running = false;
   gameOver = true;
@@ -336,19 +333,17 @@ function endGame() {
   document.getElementById("stopBtn").style.display = "none";
 }
 
-// Gyro permission
+// gyro permission
 async function enableGyro() {
-  if (typeof DeviceOrientationEvent !== "undefined" &&
-      typeof DeviceOrientationEvent.requestPermission === "function") {
+  if (typeof DeviceOrientationEvent.requestPermission === "function") {
     const res = await DeviceOrientationEvent.requestPermission();
     if (res !== "granted") return false;
   }
-
   window.addEventListener("deviceorientation", handleOrientation);
   return true;
 }
 
-// Start
+// start
 async function startGame() {
   const ok = await enableGyro();
   if (!ok) return;
@@ -356,8 +351,8 @@ async function startGame() {
   await document.documentElement.requestFullscreen?.();
 
   document.getElementById("startOverlay").style.display = "none";
-  document.getElementById("stopBtn").style.display = "block";
   document.getElementById("gameOver").style.display = "none";
+  document.getElementById("stopBtn").style.display = "block";
 
   tiltX = 0;
   tiltY = 0;
@@ -371,17 +366,16 @@ async function startGame() {
   loop();
 }
 
-// Stop
+// stop
 function stopGame() {
   running = false;
-
   if (rafId) cancelAnimationFrame(rafId);
 
   document.getElementById("startOverlay").style.display = "flex";
   document.getElementById("stopBtn").style.display = "none";
 }
 
-// Buttons
+// buttons
 document.getElementById("startBtn").onclick = startGame;
 document.getElementById("stopBtn").onclick = stopGame;
 document.getElementById("restartBtn").onclick = startGame;
