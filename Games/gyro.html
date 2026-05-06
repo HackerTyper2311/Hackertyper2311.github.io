@@ -3,20 +3,24 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Gyro Maze Game</title>
+  <title>Gyro Target Game</title>
   <style>
-    body { margin: 0; overflow: hidden; background: #111; }
+    body { margin: 0; overflow: hidden; background: #111; color: white; font-family: sans-serif; }
     #startBtn {
       position: absolute;
       top: 50%; left: 50%; transform: translate(-50%, -50%);
       padding: 15px 25px; font-size: 18px;
       background: #0f62fe; border: none; border-radius: 10px; color: white;
     }
+    #hud {
+      position: absolute; top: 10px; left: 10px; font-size: 16px;
+    }
     canvas { display: block; }
   </style>
 </head>
 <body>
 <button id="startBtn">Start</button>
+<div id="hud">Score: 0</div>
 <canvas id="game"></canvas>
 
 <script>
@@ -25,96 +29,56 @@ const ctx = canvas.getContext("2d");
 canvas.width = window.innerWidth;
 canvas.height = window.innerHeight;
 
-let ball = { x: 40, y: 40, r: 10, vx: 0, vy: 0 };
+let ball = { x: canvas.width/2, y: canvas.height/2, r: 12, vx: 0, vy: 0 };
+let target = { x: 100, y: 100, r: 14 };
 let tiltX = 0, tiltY = 0;
+let score = 0;
 
-// ECHT DOOLHOF (grid)
-const tile = 60;
-const maze = [
-  "1111111111",
-  "1000000001",
-  "1011111101",
-  "1010000101",
-  "1010110101",
-  "1010100101",
-  "1010111101",
-  "1000000001",
-  "1111111111"
-];
-
-function drawMaze() {
-  for (let y = 0; y < maze.length; y++) {
-    for (let x = 0; x < maze[y].length; x++) {
-      if (maze[y][x] === "1") {
-        ctx.fillStyle = "#555";
-        ctx.fillRect(x * tile, y * tile, tile, tile);
-      }
-    }
-  }
-}
-
-function isWall(x, y) {
-  let gridX = Math.floor(x / tile);
-  let gridY = Math.floor(y / tile);
-  return maze[gridY] && maze[gridY][gridX] === "1";
+function newTarget() {
+  target.x = Math.random() * (canvas.width - 100) + 50;
+  target.y = Math.random() * (canvas.height - 100) + 50;
 }
 
 function update() {
   ball.vx += tiltX * 0.3;
   ball.vy += tiltY * 0.3;
 
-  ball.vx *= 0.95;
-  ball.vy *= 0.95;
+  ball.vx *= 0.96;
+  ball.vy *= 0.96;
 
-  let nextX = ball.x + ball.vx;
-  let nextY = ball.y + ball.vy;
+  ball.x += ball.vx;
+  ball.y += ball.vy;
 
-  // collision X
-  if (!isWall(nextX + ball.r, ball.y) && !isWall(nextX - ball.r, ball.y)) {
-    ball.x = nextX;
-  } else {
-    ball.vx = 0;
-  }
+  // screen bounds
+  if (ball.x < ball.r) ball.x = ball.r;
+  if (ball.y < ball.r) ball.y = ball.r;
+  if (ball.x > canvas.width - ball.r) ball.x = canvas.width - ball.r;
+  if (ball.y > canvas.height - ball.r) ball.y = canvas.height - ball.r;
 
-  // collision Y
-  if (!isWall(ball.x, nextY + ball.r) && !isWall(ball.x, nextY - ball.r)) {
-    ball.y = nextY;
-  } else {
-    ball.vy = 0;
+  // check hit target
+  let dx = ball.x - target.x;
+  let dy = ball.y - target.y;
+  let dist = Math.sqrt(dx*dx + dy*dy);
+
+  if (dist < ball.r + target.r) {
+    score++;
+    document.getElementById("hud").innerText = "Score: " + score;
+    newTarget();
   }
 }
 
 function draw() {
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  ctx.clearRect(0,0,canvas.width,canvas.height);
 
-  // borders met NOTCHES
-  ctx.strokeStyle = "#888";
-  ctx.lineWidth = 8;
+  // target
   ctx.beginPath();
+  ctx.arc(target.x, target.y, target.r, 0, Math.PI*2);
+  ctx.fillStyle = "#f00";
+  ctx.fill();
 
-  for (let i = 0; i < canvas.width; i += 40) {
-    ctx.moveTo(i, 0);
-    ctx.lineTo(i + 20, 0);
-
-    ctx.moveTo(i, canvas.height);
-    ctx.lineTo(i + 20, canvas.height);
-  }
-
-  for (let i = 0; i < canvas.height; i += 40) {
-    ctx.moveTo(0, i);
-    ctx.lineTo(0, i + 20);
-
-    ctx.moveTo(canvas.width, i);
-    ctx.lineTo(canvas.width, i + 20);
-  }
-
-  ctx.stroke();
-
-  drawMaze();
-
-  // bal
+  // ball
   ctx.beginPath();
-  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI * 2);
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
   ctx.fillStyle = "#0f0";
   ctx.fill();
 }
@@ -131,20 +95,23 @@ function handleOrientation(event) {
 }
 
 async function startGame() {
-  if (typeof DeviceOrientationEvent !== 'undefined' &&
-      typeof DeviceOrientationEvent.requestPermission === 'function') {
+  if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
     const permission = await DeviceOrientationEvent.requestPermission();
     if (permission === 'granted') {
       window.addEventListener("deviceorientation", handleOrientation);
       document.getElementById("startBtn").style.display = "none";
+      newTarget();
       loop();
     }
   } else {
     window.addEventListener("deviceorientation", handleOrientation);
     document.getElementById("startBtn").style.display = "none";
+    newTarget();
     loop();
   }
 }
 
 document.getElementById("startBtn").onclick = startGame;
-</scri
+</script>
+</body>
+</html>
