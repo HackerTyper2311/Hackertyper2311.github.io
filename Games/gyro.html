@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gyro Maze Game</title>
+  <style>
+    body { margin: 0; overflow: hidden; background: #111; color: white; font-family: sans-serif; }
+    #startBtn {
+      position: absolute;
+      top: 50%; left: 50%; transform: translate(-50%, -50%);
+      padding: 15px 25px; font-size: 18px;
+      background: #0f62fe; border: none; border-radius: 10px; color: white;
+    }
+    canvas { display: block; }
+  </style>
+</head>
+<body>
+<button id="startBtn">Start (geef gyro toestemming)</button>
+<canvas id="game"></canvas>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+let ball = { x: 50, y: 50, r: 10, vx: 0, vy: 0 };
+let tiltX = 0, tiltY = 0;
+
+// simpele doolhof (muren)
+const walls = [
+  {x:100,y:0,w:20,h:300},
+  {x:200,y:200,w:20,h:300},
+  {x:300,y:0,w:20,h:300},
+  {x:400,y:200,w:20,h:300}
+];
+
+function collide(ball, wall) {
+  return ball.x + ball.r > wall.x &&
+         ball.x - ball.r < wall.x + wall.w &&
+         ball.y + ball.r > wall.y &&
+         ball.y - ball.r < wall.y + wall.h;
+}
+
+function update() {
+  ball.vx += tiltX * 0.2;
+  ball.vy += tiltY * 0.2;
+
+  ball.vx *= 0.98;
+  ball.vy *= 0.98;
+
+  ball.x += ball.vx;
+  ball.y += ball.vy;
+
+  // botsing met muren
+  for (let w of walls) {
+    if (collide(ball, w)) {
+      ball.vx *= -0.5;
+      ball.vy *= -0.5;
+    }
+  }
+
+  // rand van scherm
+  if (ball.x < ball.r) ball.x = ball.r;
+  if (ball.y < ball.r) ball.y = ball.r;
+  if (ball.x > canvas.width - ball.r) ball.x = canvas.width - ball.r;
+  if (ball.y > canvas.height - ball.r) ball.y = canvas.height - ball.r;
+}
+
+function draw() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // muren
+  ctx.fillStyle = "#444";
+  for (let w of walls) {
+    ctx.fillRect(w.x, w.y, w.w, w.h);
+  }
+
+  // bal
+  ctx.beginPath();
+  ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
+  ctx.fillStyle = "#0f0";
+  ctx.fill();
+}
+
+function loop() {
+  update();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+// Gyro / tilt
+function handleOrientation(event) {
+  tiltX = event.gamma / 10;
+  tiltY = event.beta / 10;
+}
+
+// iOS toestemming
+async function startGame() {
+  if (typeof DeviceOrientationEvent !== 'undefined' &&
+      typeof DeviceOrientationEvent.requestPermission === 'function') {
+    try {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission === 'granted') {
+        window.addEventListener("deviceorientation", handleOrientation);
+        document.getElementById("startBtn").style.display = "none";
+        loop();
+      }
+    } catch (e) {
+      alert("Gyro werkt niet: " + e);
+    }
+  } else {
+    window.addEventListener("deviceorientation", handleOrientation);
+    document.getElementById("startBtn").style.display = "none";
+    loop();
+  }
+}
+
+document.getElementById("startBtn").onclick = startGame;
+</script>
+</body>
+</html>
