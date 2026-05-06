@@ -21,6 +21,21 @@
       z-index: 10;
     }
 
+    #stopBtn {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      padding: 10px 15px;
+      font-size: 14px;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 8px;
+      color: white;
+      backdrop-filter: blur(5px);
+      z-index: 10;
+      display: none;
+    }
+
     #hud {
       position: absolute;
       top: 10px;
@@ -42,7 +57,8 @@
 </head>
 <body>
 <button id="startBtn">Start</button>
-<div id="hud">Score: 0</div>
+<button id="stopBtn">Stop</button>
+<div id="hud">Score: 0 | Time: 10</div>
 <canvas id="game"></canvas>
 
 <script>
@@ -60,18 +76,37 @@ let ball = { x: 100, y: 100, r: 12, vx: 0, vy: 0 };
 let target = { x: 200, y: 200, r: 14 };
 let tiltX = 0, tiltY = 0;
 let score = 0;
+let running = false;
+
+let timer = 10; // seconds
+let lastHitTime = Date.now();
 
 function newTarget() {
   target.x = Math.random() * (canvas.width - 100) + 50;
   target.y = Math.random() * (canvas.height - 100) + 50;
 }
 
-function update() {
-  ball.vx += tiltX * 0.4;
-  ball.vy += tiltY * 0.4;
+function resetGame() {
+  score = 0;
+  timer = 10;
+  lastHitTime = Date.now();
 
-  ball.vx *= 0.95;
-  ball.vy *= 0.95;
+  ball.x = canvas.width/2;
+  ball.y = canvas.height/2;
+  ball.vx = ball.vy = 0;
+
+  document.getElementById("hud").innerText = "Score: 0 | Time: 10";
+  newTarget();
+}
+
+function update() {
+  if (!running) return;
+
+  ball.vx += tiltX * 0.5;
+  ball.vy += tiltY * 0.5;
+
+  ball.vx *= 0.94;
+  ball.vy *= 0.94;
 
   ball.x += ball.vx;
   ball.y += ball.vy;
@@ -83,28 +118,43 @@ function update() {
   const dy = ball.y - target.y;
   const dist = Math.sqrt(dx*dx + dy*dy);
 
+  // hit target
   if (dist < ball.r + target.r) {
     score++;
-    document.getElementById("hud").innerText = "Score: " + score;
+    lastHitTime = Date.now();
 
-    // SIMPLE VIBRATION (best compatibility)
-    try {
-      navigator.vibrate && navigator.vibrate(50);
-    } catch {}
+    if (navigator.vibrate) navigator.vibrate(30);
 
     newTarget();
   }
+
+  // timer countdown
+  let elapsed = (Date.now() - lastHitTime) / 1000;
+  timer = Math.max(0, 10 - elapsed);
+
+  if (timer <= 0) {
+    resetGame();
+  }
+
+  document.getElementById("hud").innerText =
+    "Score: " + score + " | Time: " + timer.toFixed(1);
 }
 
 function draw() {
   ctx.fillStyle = "#111";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // target
+  const gradient = ctx.createRadialGradient(target.x, target.y, 2, target.x, target.y, target.r);
+  gradient.addColorStop(0, "#ff6666");
+  gradient.addColorStop(1, "#660000");
+
   ctx.beginPath();
   ctx.arc(target.x, target.y, target.r, 0, Math.PI*2);
-  ctx.fillStyle = "red";
+  ctx.fillStyle = gradient;
   ctx.fill();
 
+  // ball
   ctx.beginPath();
   ctx.arc(ball.x, ball.y, ball.r, 0, Math.PI*2);
   ctx.fillStyle = "lime";
@@ -124,19 +174,16 @@ function handleOrientation(event) {
 
 async function startGame() {
   try {
-    // FULLSCREEN (best effort)
     const el = document.documentElement;
     if (el.requestFullscreen) await el.requestFullscreen();
 
-    // Some Android browsers need this trick
-    if (screen.orientation && screen.orientation.lock) {
-      try { await screen.orientation.lock("portrait"); } catch {}
-    }
-
     window.addEventListener("deviceorientation", handleOrientation);
-    document.getElementById("startBtn").style.display = "none";
 
-    newTarget();
+    document.getElementById("startBtn").style.display = "none";
+    document.getElementById("stopBtn").style.display = "block";
+
+    running = true;
+    resetGame();
     loop();
 
   } catch (e) {
@@ -144,7 +191,14 @@ async function startGame() {
   }
 }
 
+function stopGame() {
+  running = false;
+  document.getElementById("startBtn").style.display = "block";
+  document.getElementById("stopBtn").style.display = "none";
+}
+
 document.getElementById("startBtn").onclick = startGame;
+document.getElementById("stopBtn").onclick = stopGame;
 </script>
 </body>
 </html>
