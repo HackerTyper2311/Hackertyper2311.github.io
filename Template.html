@@ -1,51 +1,230 @@
+<!-- =========================
+        AI GAME TEMPLATE
+     FULL STACK GAME BASE
+   MOBILE + DESKTOP SAFE
+========================= -->
+
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<meta charset=\"UTF-8\">
-<meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
-<title>AI Game</title>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>AI GAME</title>
 
 <style>
-* { box-sizing: border-box; }
+
+/* =========================
+        GLOBAL RESET
+========================= */
+
+* {
+  box-sizing: border-box;
+}
 
 html, body {
   margin: 0;
-  overflow: hidden;
+  padding: 0;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  font-family: system-ui, sans-serif;
   background: #0b0b0f;
   color: white;
-  font-family: system-ui;
+  height: 100%;
+  width: 100%;
 }
+
+/* =========================
+        MENU SYSTEM STYLE
+========================= */
+
+.container {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+}
+
+h1 {
+  margin: 10px 0 20px;
+  font-size: 28px;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+}
+
+.card {
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.15);
+  padding: 20px;
+  border-radius: 16px;
+  color: white;
+  text-decoration: none;
+}
+
+/* =========================
+        GAME CANVAS
+========================= */
 
 canvas {
   position: fixed;
   inset: 0;
   width: 100vw;
   height: 100vh;
+  display: block;
 }
+
+/* =========================
+        UI LAYER
+========================= */
+
+#ui {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* =========================
+        BUTTONS (OPTIONAL)
+========================= */
+
+button {
+  font-family: inherit;
+}
+
 </style>
 </head>
 
 <body>
 
-<canvas id=\"game\"></canvas>
+<!-- =========================
+        UI / MENU AREA
+========================= -->
+
+<div class="container">
+  <h1>AI GAME</h1>
+
+  <div class="grid">
+    <div class="card">
+      <h2>System</h2>
+      <p>Canvas + Input Ready</p>
+    </div>
+
+    <div class="card">
+      <h2>Mobile</h2>
+      <p>Responsive Enabled</p>
+    </div>
+
+    <div class="card">
+      <h2>AI Mode</h2>
+      <p>Safe to generate logic</p>
+    </div>
+  </div>
+</div>
+
+<!-- =========================
+        GAME CANVAS
+========================= -->
+
+<canvas id="game"></canvas>
 
 <script>
-const canvas = document.getElementById(\"game\");
-const ctx = canvas.getContext(\"2d\");
 
-function resize(){
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
+/* =========================
+        CANVAS SETUP
+========================= */
+
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+function resize() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
 }
+window.addEventListener("resize", resize);
 resize();
-addEventListener(\"resize\", resize);
 
-function loop(){
-  ctx.fillStyle = \"#0b0b0f\";
-  ctx.fillRect(0,0,canvas.width,canvas.height);
+/* =========================
+        GAME STATE
+========================= */
+
+let running = true;
+
+/* =========================
+        INPUT SYSTEM
+========================= */
+
+// Touch / mouse future support placeholder
+let pointer = { x: 0, y: 0 };
+
+window.addEventListener("pointermove", (e) => {
+  pointer.x = e.clientX;
+  pointer.y = e.clientY;
+});
+
+/* =========================
+        GYRO SYSTEM
+========================= */
+
+let tiltX = 0;
+let tiltY = 0;
+
+window.addEventListener("deviceorientation", (e) => {
+  tiltX = (e.gamma || 0) / 10;
+  tiltY = (e.beta || 0) / 10;
+});
+
+/* =========================
+        WAKE LOCK SYSTEM
+========================= */
+
+let wakeLock = null;
+
+async function enableWakeLock() {
+  try {
+    if ("wakeLock" in navigator) {
+      wakeLock = await navigator.wakeLock.request("screen");
+    }
+  } catch (err) {}
+}
+
+async function disableWakeLock() {
+  try {
+    if (wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch (err) {}
+}
+
+/* =========================
+        GAME LOOP
+========================= */
+
+function update() {
+  // AI GAME LOGIC GOES HERE
+}
+
+function draw() {
+  ctx.fillStyle = "#0b0b0f";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+  // DRAW GAME HERE
+}
+
+function loop() {
+  if (!running) return;
+
+  update();
+  draw();
+
   requestAnimationFrame(loop);
 }
+
 loop();
+
 </script>
 
 </body>
