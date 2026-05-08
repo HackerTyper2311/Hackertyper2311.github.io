@@ -28,7 +28,7 @@ body{
     align-items:center;
 }
 
-/* APP */
+/* APP CONTAINER */
 .container{
     width:100%;
     height:100vh;
@@ -51,7 +51,7 @@ body{
     display:flex;
 }
 
-/* TEXT */
+/* TITLE */
 h1{
     text-align:center;
     font-size:22px;
@@ -160,6 +160,8 @@ pre{
     <div id="loading">⏳ Decrypting...</div>
 
     <pre id="output"></pre>
+
+    <button onclick="goToSend()">📤 Send encrypted email</button>
 </div>
 
 </div>
@@ -258,7 +260,7 @@ async function decryptData(payload,password){
     return new TextDecoder().decode(decrypted);
 }
 
-/* UNLOCK FLOW */
+/* UNLOCK */
 async function unlockMessage(){
 
     const password = document.getElementById("viewPassword").value;
@@ -270,6 +272,7 @@ async function unlockMessage(){
     }
 
     show("viewer");
+
     document.getElementById("loading").style.display="block";
     document.getElementById("output").textContent="";
 
@@ -310,6 +313,20 @@ async function sendMail(){
         encodeURIComponent(url);
 
     window.location.href = mail;
+}
+
+/* BACK TO SEND */
+function goToSend(){
+
+    history.replaceState(null,"",location.pathname);
+
+    document.getElementById("message").value="";
+    document.getElementById("password").value="";
+    document.getElementById("viewPassword").value="";
+    document.getElementById("output").textContent="";
+    document.getElementById("error").textContent="";
+
+    show("sender");
 }
 </script>
 
