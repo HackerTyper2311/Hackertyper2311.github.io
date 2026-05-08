@@ -2,80 +2,138 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Secure Mail</title>
 
 <style>
-body{
-    margin:0;
-    background:#0d1117;
-    color:white;
-    font-family:Arial,sans-serif;
-    display:flex;
-    justify-content:center;
-    align-items:center;
-    min-height:100vh;
+:root{
+    --bg:#0d1117;
+    --card:#161b22;
+    --accent:#238636;
+    --text:#ffffff;
 }
 
-.container{
-    width:min(95%,700px);
-    background:#161b22;
-    padding:25px;
-    border-radius:20px;
-    box-shadow:0 0 40px rgba(0,0,0,.5);
-}
-
-h1{
-    text-align:center;
-}
-
-textarea,input{
-    width:100%;
-    margin-top:10px;
-    margin-bottom:20px;
-    padding:12px;
-    border:none;
-    border-radius:10px;
-    background:#0d1117;
-    color:white;
+*{
     box-sizing:border-box;
 }
 
-button{
+body{
+    margin:0;
+    background:var(--bg);
+    color:var(--text);
+    font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial;
+    height:100vh;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+}
+
+/* APP */
+.container{
+    width:100%;
+    height:100vh;
+    max-width:520px;
+    background:var(--card);
+    display:flex;
+    flex-direction:column;
+    padding:20px;
+}
+
+/* SCREENS */
+.screen{
+    display:none;
+    flex:1;
+    flex-direction:column;
+    justify-content:center;
+}
+
+.active{
+    display:flex;
+}
+
+/* TEXT */
+h1{
+    text-align:center;
+    font-size:22px;
+    margin-bottom:20px;
+}
+
+/* INPUTS */
+textarea,input{
     width:100%;
     padding:14px;
+    margin:10px 0;
     border:none;
-    border-radius:10px;
-    background:#238636;
+    border-radius:12px;
+    background:var(--bg);
+    color:var(--text);
+    font-size:16px;
+    outline:none;
+}
+
+/* BUTTON */
+button{
+    width:100%;
+    padding:16px;
+    margin-top:10px;
+    border:none;
+    border-radius:12px;
+    background:var(--accent);
     color:white;
     font-size:16px;
+    font-weight:600;
     cursor:pointer;
 }
 
-button:hover{
-    opacity:.9;
+button:active{
+    transform:scale(0.98);
 }
 
-#viewer{
-    display:none;
-}
-
+/* MESSAGE */
 pre{
+    background:var(--bg);
+    padding:16px;
+    border-radius:12px;
     white-space:pre-wrap;
-    word-wrap:break-word;
-    background:#0d1117;
-    padding:15px;
-    border-radius:10px;
+    word-break:break-word;
+    font-size:15px;
+}
+
+/* LOADING */
+#loading{
+    text-align:center;
+    opacity:0.7;
+}
+
+/* ERROR */
+#error{
+    color:#ff6b6b;
+    text-align:center;
+    font-size:14px;
+}
+
+/* DESKTOP */
+@media (min-width:700px){
+    body{
+        background:#000;
+    }
+
+    .container{
+        height:90vh;
+        border-radius:20px;
+        box-shadow:0 0 40px rgba(0,0,0,.6);
+    }
 }
 </style>
 </head>
+
 <body>
 
 <div class="container">
 
 <!-- SEND -->
-<div id="sender">
-    <h1>🔐 Secure Email Sender</h1>
+<div id="sender" class="screen active">
+    <h1>🔐 Secure Message</h1>
 
     <textarea id="message" rows="8" placeholder="Type secret message..."></textarea>
 
@@ -84,13 +142,22 @@ pre{
     <button onclick="sendMail()">Generate Email</button>
 </div>
 
-<!-- VIEW -->
-<div id="viewer">
-    <h1>📩 Encrypted Message</h1>
+<!-- AUTH -->
+<div id="auth" class="screen">
+    <h1>🔑 Enter Password</h1>
 
     <input type="password" id="viewPassword" placeholder="Password">
 
-    <button onclick="decryptMessage()">Decrypt</button>
+    <button onclick="unlockMessage()">Unlock</button>
+
+    <p id="error"></p>
+</div>
+
+<!-- VIEW -->
+<div id="viewer" class="screen">
+    <h1>📩 Message</h1>
+
+    <div id="loading">⏳ Decrypting...</div>
 
     <pre id="output"></pre>
 </div>
@@ -100,12 +167,22 @@ pre{
 <script>
 const hash = location.hash.slice(1);
 
-if(hash){
-    document.getElementById("sender").style.display="none";
-    document.getElementById("viewer").style.display="block";
+/* SCREEN CONTROL */
+function show(id){
+    document.querySelectorAll(".screen").forEach(s=>s.classList.remove("active"));
+    document.getElementById(id).classList.add("active");
 }
 
-async function getKey(password,salt){
+/* INIT */
+if(hash){
+    show("auth");
+}else{
+    show("sender");
+}
+
+/* ---------- CRYPTO ---------- */
+
+async function getKey(password, salt){
     const enc = new TextEncoder();
 
     const keyMaterial = await crypto.subtle.importKey(
@@ -119,7 +196,7 @@ async function getKey(password,salt){
     return crypto.subtle.deriveKey(
         {
             name:"PBKDF2",
-            salt:salt,
+            salt,
             iterations:100000,
             hash:"SHA-256"
         },
@@ -138,6 +215,7 @@ function base64ToBuf(base64){
     return Uint8Array.from(atob(base64),c=>c.charCodeAt(0));
 }
 
+/* ENCRYPT */
 async function encryptMessage(message,password){
 
     const enc = new TextEncoder();
@@ -160,6 +238,7 @@ async function encryptMessage(message,password){
     });
 }
 
+/* DECRYPT */
 async function decryptData(payload,password){
 
     const obj = JSON.parse(payload);
@@ -179,6 +258,35 @@ async function decryptData(payload,password){
     return new TextDecoder().decode(decrypted);
 }
 
+/* UNLOCK FLOW */
+async function unlockMessage(){
+
+    const password = document.getElementById("viewPassword").value;
+    const payload = decodeURIComponent(hash);
+
+    if(!password){
+        document.getElementById("error").textContent="Enter password";
+        return;
+    }
+
+    show("viewer");
+    document.getElementById("loading").style.display="block";
+    document.getElementById("output").textContent="";
+
+    try{
+        const text = await decryptData(payload,password);
+
+        document.getElementById("loading").style.display="none";
+        document.getElementById("output").textContent = text;
+
+    }catch(e){
+        document.getElementById("loading").style.display="none";
+        show("auth");
+        document.getElementById("error").textContent="❌ Wrong password";
+    }
+}
+
+/* SEND */
 async function sendMail(){
 
     const message = document.getElementById("message").value;
@@ -202,26 +310,6 @@ async function sendMail(){
         encodeURIComponent(url);
 
     window.location.href = mail;
-}
-
-async function decryptMessage(){
-
-    try{
-
-        const password =
-            document.getElementById("viewPassword").value;
-
-        const payload =
-            decodeURIComponent(location.hash.slice(1));
-
-        const text =
-            await decryptData(payload,password);
-
-        document.getElementById("output").textContent=text;
-
-    }catch(e){
-        alert("Wrong password or corrupted message");
-    }
 }
 </script>
 
