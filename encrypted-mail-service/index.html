@@ -8,9 +8,9 @@
 <style>
 body{
     margin:0;
-    background:#0b0f14;
-    font-family:Arial,sans-serif;
+    background:#0d1117;
     color:white;
+    font-family:Arial,sans-serif;
     display:flex;
     justify-content:center;
     align-items:center;
@@ -18,24 +18,24 @@ body{
 }
 
 .container{
-    width:min(95%,420px);
+    width:min(95%,700px);
     background:#161b22;
-    padding:22px;
+    padding:25px;
     border-radius:20px;
-    box-shadow:0 0 40px rgba(0,0,0,.6);
+    box-shadow:0 0 40px rgba(0,0,0,.5);
 }
 
-h2{
+h1{
     text-align:center;
 }
 
 textarea,input{
     width:100%;
     margin-top:10px;
-    margin-bottom:15px;
+    margin-bottom:20px;
     padding:12px;
     border:none;
-    border-radius:12px;
+    border-radius:10px;
     background:#0d1117;
     color:white;
     box-sizing:border-box;
@@ -45,87 +45,65 @@ button{
     width:100%;
     padding:14px;
     border:none;
-    border-radius:12px;
+    border-radius:10px;
     background:#238636;
     color:white;
-    font-size:15px;
+    font-size:16px;
     cursor:pointer;
 }
 
 button:hover{
-    opacity:0.9;
+    opacity:.9;
+}
+
+#viewer{
+    display:none;
 }
 
 pre{
     white-space:pre-wrap;
+    word-wrap:break-word;
     background:#0d1117;
     padding:15px;
-    border-radius:12px;
+    border-radius:10px;
 }
-
-.hidden{ display:none; }
 </style>
 </head>
-
 <body>
 
 <div class="container">
 
 <!-- SEND -->
-<div id="sendView">
-    <h2>🔐 Secure Mail</h2>
+<div id="sender">
+    <h1>🔐 Secure Email Sender</h1>
 
-    <textarea id="message" rows="6" placeholder="Type secret message..."></textarea>
+    <textarea id="message" rows="8" placeholder="Type secret message..."></textarea>
+
     <input type="password" id="password" placeholder="Password">
 
-    <button onclick="sendMail()">Share Secure Link 📤</button>
-
-    <!-- NEW BUTTON -->
-    <button onclick="resetComposer()" style="margin-top:10px;background:#444;">
-        ✉️ Send your own encrypted email
-    </button>
+    <button onclick="sendMail()">Generate Email</button>
 </div>
 
 <!-- VIEW -->
-<div id="view" class="hidden">
-    <h2>📩 Locked Message</h2>
+<div id="viewer">
+    <h1>📩 Encrypted Message</h1>
 
-    <input type="password" id="viewPassword" placeholder="Enter password">
-    <button onclick="decryptMessage()">Unlock</button>
+    <input type="password" id="viewPassword" placeholder="Password">
 
-    <h3 id="subject"></h3>
+    <button onclick="decryptMessage()">Decrypt</button>
+
     <pre id="output"></pre>
 </div>
 
 </div>
 
 <script>
+const hash = location.hash.slice(1);
 
-/* ================= ROUTING ================= */
-
-const params = new URLSearchParams(location.hash.slice(1));
-let payload = null;
-
-if(params.has("mail")){
-    payload = decodeURIComponent(params.get("mail"));
-    document.getElementById("sendView").classList.add("hidden");
-    document.getElementById("view").classList.remove("hidden");
+if(hash){
+    document.getElementById("sender").style.display="none";
+    document.getElementById("viewer").style.display="block";
 }
-
-/* ================= RESET BUTTON ================= */
-
-function resetComposer(){
-
-    document.getElementById("message").value = "";
-    document.getElementById("password").value = "";
-
-    document.getElementById("view").classList.add("hidden");
-    document.getElementById("sendView").classList.remove("hidden");
-
-    history.replaceState(null, "", location.pathname);
-}
-
-/* ================= CRYPTO ================= */
 
 async function getKey(password,salt){
     const enc = new TextEncoder();
@@ -141,7 +119,7 @@ async function getKey(password,salt){
     return crypto.subtle.deriveKey(
         {
             name:"PBKDF2",
-            salt,
+            salt:salt,
             iterations:100000,
             hash:"SHA-256"
         },
@@ -153,31 +131,26 @@ async function getKey(password,salt){
 }
 
 function bufToBase64(buf){
-    let binary='';
-    const bytes=new Uint8Array(buf);
-    for(let i=0;i<bytes.length;i++){
-        binary+=String.fromCharCode(bytes[i]);
-    }
-    return btoa(binary);
+    return btoa(String.fromCharCode(...new Uint8Array(buf)));
 }
 
-function base64ToBuf(b64){
-    return Uint8Array.from(atob(b64),c=>c.charCodeAt(0));
+function base64ToBuf(base64){
+    return Uint8Array.from(atob(base64),c=>c.charCodeAt(0));
 }
 
-async function encryptMessage(msg,pw){
+async function encryptMessage(message,password){
 
-    const enc=new TextEncoder();
+    const enc = new TextEncoder();
 
-    const salt=crypto.getRandomValues(new Uint8Array(16));
-    const iv=crypto.getRandomValues(new Uint8Array(12));
+    const salt = crypto.getRandomValues(new Uint8Array(16));
+    const iv = crypto.getRandomValues(new Uint8Array(12));
 
-    const key=await getKey(pw,salt);
+    const key = await getKey(password,salt);
 
-    const encrypted=await crypto.subtle.encrypt(
+    const encrypted = await crypto.subtle.encrypt(
         {name:"AES-GCM",iv},
         key,
-        enc.encode(msg)
+        enc.encode(message)
     );
 
     return JSON.stringify({
@@ -187,17 +160,17 @@ async function encryptMessage(msg,pw){
     });
 }
 
-async function decryptData(payload,pw){
+async function decryptData(payload,password){
 
-    const obj=JSON.parse(payload);
+    const obj = JSON.parse(payload);
 
-    const salt=base64ToBuf(obj.salt);
-    const iv=base64ToBuf(obj.iv);
-    const data=base64ToBuf(obj.data);
+    const salt = base64ToBuf(obj.salt);
+    const iv = base64ToBuf(obj.iv);
+    const data = base64ToBuf(obj.data);
 
-    const key=await getKey(pw,salt);
+    const key = await getKey(password,salt);
 
-    const decrypted=await crypto.subtle.decrypt(
+    const decrypted = await crypto.subtle.decrypt(
         {name:"AES-GCM",iv},
         key,
         data
@@ -206,63 +179,50 @@ async function decryptData(payload,pw){
     return new TextDecoder().decode(decrypted);
 }
 
-/* ================= SEND ================= */
-
 async function sendMail(){
 
-    const message=document.getElementById("message").value;
-    const password=document.getElementById("password").value;
+    const message = document.getElementById("message").value;
+    const password = document.getElementById("password").value;
 
     if(!message || !password){
         alert("Fill everything");
         return;
     }
 
-    const encrypted=await encryptMessage(message,password);
+    const encrypted = await encryptMessage(message,password);
 
     const url =
-        "https://hackertyper2311.github.io/encrypted-mail-service/#mail=" +
+        location.origin +
+        location.pathname +
+        "#" +
         encodeURIComponent(encrypted);
 
-    const shareText =
-`🔐 Secure Message
+    const mail =
+        "mailto:?subject=Encrypted Message&body=" +
+        encodeURIComponent(url);
 
-Open:
-${url}
-
-Password required.`;
-
-    if(navigator.share){
-        await navigator.share({
-            title:"🔐 Secure Message",
-            text:shareText,
-            url:url
-        });
-    }else{
-        window.location.href =
-            "mailto:?subject=🔐 Secure Message&body=" +
-            encodeURIComponent(shareText);
-    }
+    window.location.href = mail;
 }
-
-/* ================= DECRYPT ================= */
 
 async function decryptMessage(){
 
     try{
 
-        const pw=document.getElementById("viewPassword").value;
+        const password =
+            document.getElementById("viewPassword").value;
 
-        const text=await decryptData(payload,pw);
+        const payload =
+            decodeURIComponent(location.hash.slice(1));
 
-        document.getElementById("subject").textContent="🔐 Secure Message";
+        const text =
+            await decryptData(payload,password);
+
         document.getElementById("output").textContent=text;
 
     }catch(e){
         alert("Wrong password or corrupted message");
     }
 }
-
 </script>
 
 </body>
