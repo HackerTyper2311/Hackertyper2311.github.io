@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HTML Loader</title>
+
+<style>
+*{
+    box-sizing:border-box;
+}
+
+body{
+    margin:0;
+    background:#0f172a;
+    color:white;
+    font-family:Arial,sans-serif;
+    overflow:hidden;
+}
+
+.topbar{
+    height:60px;
+    background:#111827;
+    border-bottom:2px solid #1e293b;
+
+    display:flex;
+    align-items:center;
+    gap:10px;
+
+    padding:10px;
+}
+
+button{
+    background:#2563eb;
+    color:white;
+    border:none;
+    padding:12px 18px;
+    border-radius:10px;
+    cursor:pointer;
+    font-size:15px;
+    font-weight:bold;
+}
+
+button:hover{
+    background:#3b82f6;
+}
+
+iframe{
+    width:100%;
+    height:calc(100vh - 60px);
+    border:none;
+    background:white;
+}
+
+.status{
+    margin-left:auto;
+    opacity:0.8;
+    font-size:14px;
+}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+    <button id="loadBtn">Load Clipboard HTML</button>
+    <div class="status" id="status">Ready</div>
+</div>
+
+<iframe id="viewer"></iframe>
+
+<script>
+const iframe = document.getElementById("viewer");
+const statusText = document.getElementById("status");
+
+function loadHTML(html){
+    iframe.srcdoc = html;
+}
+
+async function loadClipboardHTML(){
+
+    if(!navigator.clipboard){
+        statusText.textContent = "Clipboard API unsupported";
+        return;
+    }
+
+    try{
+
+        statusText.textContent = "Requesting permission...";
+
+        const permission = await navigator.permissions.query({
+            name: "clipboard-read"
+        });
+
+        if(
+            permission.state !== "granted" &&
+            permission.state !== "prompt"
+        ){
+            statusText.textContent = "Clipboard permission denied";
+            return;
+        }
+
+        const text = await navigator.clipboard.readText();
+
+        if(!text.trim()){
+            statusText.textContent = "Clipboard empty";
+            return;
+        }
+
+        iframe.srcdoc = text;
+
+        statusText.textContent = "HTML loaded";
+
+    }
+    catch(err){
+
+        console.error(err);
+
+        statusText.textContent =
+            "Open with HTTPS or localhost";
+    }
+}
+
+document
+.getElementById("loadBtn")
+.addEventListener("click", loadClipboardHTML);
+
+loadHTML(`
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+body{
+    margin:0;
+    display:flex;
+    justify-content:center;
+    align-items:center;
+    height:100vh;
+    font-family:Arial;
+    background:#111827;
+    color:white;
+}
+</style>
+</head>
+<body>
+<h1>Hello World</h1>
+</body>
+</html>
+`);
+</script>
+
+</body>
+</html>
