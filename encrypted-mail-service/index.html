@@ -142,6 +142,10 @@ pre{
     <button onclick="sendMail()">Generate Email</button>
 </div>
 
+<button id="firefoxAddonBtn" onclick="installAddon()" style="display:none;background:#ff7139;">
+    🦊 Install Firefox Encryption Extension
+</button>
+
 <!-- AUTH -->
 <div id="auth" class="screen">
     <h1>🔑 Enter Password</h1>
@@ -327,6 +331,22 @@ function goToSend(){
     document.getElementById("error").textContent="";
 
     show("sender");
+}
+
+/* FIREFOX EXTENSION BUTTON */
+const isFirefox =
+    navigator.userAgent.toLowerCase().includes("firefox") &&
+    !navigator.userAgent.toLowerCase().includes("chrome");
+
+if(isFirefox){
+    document.getElementById("firefoxAddonBtn").style.display = "block";
+}
+
+function installAddon(){
+    window.open(
+        "https://addons.mozilla.org/nl/firefox/addon/encrypted-gmail/",
+        "_blank"
+    );
 }
 </script>
 
