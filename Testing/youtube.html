@@ -21,19 +21,15 @@ html,body{
 }
 
 body{
-    display:flex;
-    flex-direction:column;
-    min-height:100vh;
     min-height:100dvh;
 }
 
 
-/* Dynamic container */
+/* Main layout */
 .container{
-    flex:1;
-    min-height:0;
     display:flex;
     width:100%;
+    height:100dvh;
 }
 
 
@@ -71,8 +67,8 @@ body{
 }
 
 
-/* Mobile layout */
-@media(max-width:768px){
+/* Portrait phones */
+@media (orientation:portrait){
 
     .container{
         flex-direction:column;
@@ -81,15 +77,13 @@ body{
     .video{
         flex:none;
         width:100%;
-        aspect-ratio:16/9;
-    }
-
-    .video iframe{
-        height:100%;
+        height:30dvh;
+        max-height:280px;
     }
 
     .chat{
         flex:1;
+        width:100%;
         min-width:0;
         padding:6px;
     }
@@ -97,7 +91,32 @@ body{
 }
 
 
-/* Android navigation bar support */
+/* Small portrait screens */
+@media (orientation:portrait) and (max-width:400px){
+
+    .video{
+        height:25dvh;
+        max-height:220px;
+    }
+
+}
+
+
+/* Landscape phones */
+@media (orientation:landscape) and (max-height:600px){
+
+    .container{
+        flex-direction:row;
+    }
+
+    .video{
+        height:100%;
+    }
+
+}
+
+
+/* Android safe area */
 @supports(padding:env(safe-area-inset-bottom)){
 
     body{
@@ -116,7 +135,7 @@ body{
     <div class="video">
         <iframe
             src="https://www.youtube.com/embed/gGCB8hOfaBw?autoplay=1"
-            title="YouTube Live Video"
+            title="YouTube Live"
             allow="autoplay; encrypted-media; picture-in-picture"
             allowfullscreen>
         </iframe>
