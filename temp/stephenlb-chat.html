@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PubNub Live Chat (Light Theme)</title>
+  <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.4.3.min.js"></script>
+  <style>
+    :root {
+      --bg: transparent;
+      --card-bg: rgba(255, 255, 255, 0.9);
+      --card-border: rgba(226, 232, 240, 0.8);
+      --text-color: #0f172a;
+      --user-color: #2563eb;
+      --time-color: #64748b;
+      --shadow-color: rgba(0, 0, 0, 0.06);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      height: 100vh;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-end;
+      padding: 10px;
+    }
+
+    #list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      width: 100%;
+    }
+
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border-radius: 12px;
+      padding: 12px 14px;
+      box-shadow: 0 4px 12px var(--shadow-color);
+      animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 4px;
+    }
+
+    .user {
+      font-size: 0.82rem;
+      font-weight: 700;
+      color: var(--user-color);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+    }
+
+    .time {
+      font-size: 0.68rem;
+      color: var(--time-color);
+      font-weight: 500;
+    }
+
+    .msg {
+      font-size: 0.9rem;
+      color: var(--text-color);
+      line-height: 1.35;
+      word-break: break-word;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(12px) scale(0.97); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="list"></div>
+
+  <script>
+    const CONFIG = {
+      channel: "quickfix",
+      pubKey: "demo",
+      subKey: "demo",
+      maxMessages: 3
+    };
+
+    const list = document.getElementById("list");
+
+    const pubnub = new PubNub({
+      publishKey: CONFIG.pubKey,
+      subscribeKey: CONFIG.subKey,
+      userId: "embed-light-" + Math.random().toString(36).substring(2, 7)
+    });
+
+    pubnub.addListener({
+      message: (e) => {
+        const d = e.message || {};
+        const user = d.user || "@anonymous";
+        const text = d.message || JSON.stringify(d);
+        const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <div class="header">
+            <span class="user">${escape(user)}</span>
+            <span class="time">${time}</span>
+          </div>
+          <div class="msg">${escape(text)}</div>
+        `;
+
+        list.appendChild(card);
+
+        const cards = list.querySelectorAll(".card");
+        if (cards.length > CONFIG.maxMessages) {
+          cards[0].remove();
+        }
+      }
+    });
+
+    pubnub.subscribe({ channels: [CONFIG.channel] });
+
+    function escape(s) {
+      return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    }
+  </script>
+</body>
+</html>
