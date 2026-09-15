@@ -3,16 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PubNub Live Chat (Unlimited, No Scrollbar)</title>
+  <title>PubNub Live Chat (Prefix Triggered Style)</title>
   <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.4.3.min.js"></script>
   <style>
     :root {
       --bg: transparent;
-      --card-bg: rgba(255, 255, 255, 0.9);
-      --card-border: rgba(226, 232, 240, 0.8);
-      --text-color: #0f172a;
-      --user-color: #2563eb;
-      --time-color: #64748b;
       --shadow-color: rgba(0, 0, 0, 0.06);
     }
 
@@ -28,7 +23,6 @@
       padding: 10px;
     }
 
-    /* Scrollable container with scrollbars hidden completely */
     #list {
       display: flex;
       flex-direction: column;
@@ -37,22 +31,20 @@
       height: 100%;
       overflow-y: auto;
       scroll-behavior: smooth;
-      scrollbar-width: none; /* Firefox */
+      scrollbar-width: none;
     }
 
     #list::-webkit-scrollbar {
-      display: none; /* Chrome, Safari, Opera */
+      display: none;
     }
 
     .card {
-      background: var(--card-bg);
-      border: 1px solid var(--card-border);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
       border-radius: 12px;
       padding: 12px 14px;
       box-shadow: 0 4px 12px var(--shadow-color);
       flex-shrink: 0;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
       animation: fadeIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
 
@@ -66,7 +58,6 @@
     .user {
       font-size: 0.82rem;
       font-weight: 700;
-      color: var(--user-color);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -75,13 +66,12 @@
 
     .time {
       font-size: 0.68rem;
-      color: var(--time-color);
       font-weight: 500;
+      opacity: 0.8;
     }
 
     .msg {
       font-size: 0.9rem;
-      color: var(--text-color);
       line-height: 1.35;
       word-break: break-word;
     }
@@ -94,6 +84,7 @@
 </head>
 <body>
 
+  <!-- Clean empty list to prevent duplicate initial cards -->
   <div id="list"></div>
 
   <script>
@@ -103,39 +94,69 @@
       subKey: "demo"
     };
 
+    // Style pool for when someone uses the !style command
+    const randomStyles = [
+      { bg: "rgba(15, 23, 42, 0.9)", border: "1px solid rgba(56, 189, 248, 0.4)", text: "#f8fafc", user: "#38bdf8", time: "#94a3b8" },
+      { bg: "rgba(20, 10, 30, 0.9)", border: "1px solid rgba(236, 72, 153, 0.5)", text: "#fbcfe8", user: "#ec4899", time: "#f472b6" },
+      { bg: "rgba(6, 78, 59, 0.9)", border: "1px solid rgba(52, 211, 153, 0.5)", text: "#ecfdf5", user: "#34d399", time: "#a7f3d0" },
+      { bg: "rgba(124, 45, 18, 0.9)", border: "1px solid rgba(251, 146, 60, 0.5)", text: "#fff7ed", user: "#fb923c", time: "#fed7aa" },
+      { bg: "rgba(76, 29, 149, 0.9)", border: "1px solid rgba(196, 181, 253, 0.5)", text: "#f5f3ff", user: "#c4b5fd", time: "#ddd6fe" }
+    ];
+
+    // Default clean style for normal messages without the prefix
+    const defaultStyle = {
+      bg: "rgba(255, 255, 255, 0.95)",
+      border: "1px solid rgba(226, 232, 240, 0.9)",
+      text: "#0f172a",
+      user: "#2563eb",
+      time: "#64748b"
+    };
+
     const list = document.getElementById("list");
 
-    const pubnub = new PubNub({
-      publishKey: CONFIG.pubKey,
-      subscribeKey: CONFIG.subKey,
-      userId: "embed-noscrollbar-" + Math.random().toString(36).substring(2, 7)
-    });
+    if (!window.pubnubInitialized) {
+      window.pubnubInitialized = true;
 
-    pubnub.addListener({
-      message: (e) => {
-        const d = e.message || {};
-        const user = d.user || "@anonymous";
-        const text = d.message || JSON.stringify(d);
-        const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+      const pubnub = new PubNub({
+        publishKey: CONFIG.pubKey,
+        subscribeKey: CONFIG.subKey,
+        userId: "embed-fixed-" + Math.random().toString(36).substring(2, 7)
+      });
 
-        const card = document.createElement("div");
-        card.className = "card";
-        card.innerHTML = `
-          <div class="header">
-            <span class="user">${escape(user)}</span>
-            <span class="time">${time}</span>
-          </div>
-          <div class="msg">${escape(text)}</div>
-        `;
+      pubnub.addListener({
+        message: (e) => {
+          const d = e.message || {};
+          const user = d.user || "@anonymous";
+          const text = d.message || JSON.stringify(d);
+          const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-        list.appendChild(card);
-        
-        // Auto-scroll to the newest message smoothly without showing a bar
-        list.scrollTop = list.scrollHeight;
-      }
-    });
+          let styleToUse = defaultStyle;
 
-    pubnub.subscribe({ channels: [CONFIG.channel] });
+          // Check if the message starts with "!style"
+          if (text.trim().toLowerCase().startsWith("!style")) {
+            styleToUse = randomStyles[Math.floor(Math.random() * randomStyles.length)];
+          }
+
+          const card = document.createElement("div");
+          card.className = "card";
+          card.style.background = styleToUse.bg;
+          card.style.border = styleToUse.border;
+
+          card.innerHTML = `
+            <div class="header">
+              <span class="user" style="color: ${styleToUse.user};">${escape(user)}</span>
+              <span class="time" style="color: ${styleToUse.time};">${time}</span>
+            </div>
+            <div class="msg" style="color: ${styleToUse.text};">${escape(text)}</div>
+          `;
+
+          list.appendChild(card);
+          list.scrollTop = list.scrollHeight;
+        }
+      });
+
+      pubnub.subscribe({ channels: [CONFIG.channel] });
+    }
 
     function escape(s) {
       return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
