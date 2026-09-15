@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>PubNub Live Chat (Prefix Triggered Style)</title>
+  <title>PubNub Live Chat (!gamble Command)</title>
   <script src="https://cdn.pubnub.com/sdk/javascript/pubnub.7.4.3.min.js"></script>
   <style>
     :root {
@@ -84,7 +84,6 @@
 </head>
 <body>
 
-  <!-- Clean empty list to prevent duplicate initial cards -->
   <div id="list"></div>
 
   <script>
@@ -94,7 +93,7 @@
       subKey: "demo"
     };
 
-    // Style pool for when someone uses the !style command
+    // Pool of random styles triggered by !gamble
     const randomStyles = [
       { bg: "rgba(15, 23, 42, 0.9)", border: "1px solid rgba(56, 189, 248, 0.4)", text: "#f8fafc", user: "#38bdf8", time: "#94a3b8" },
       { bg: "rgba(20, 10, 30, 0.9)", border: "1px solid rgba(236, 72, 153, 0.5)", text: "#fbcfe8", user: "#ec4899", time: "#f472b6" },
@@ -103,7 +102,7 @@
       { bg: "rgba(76, 29, 149, 0.9)", border: "1px solid rgba(196, 181, 253, 0.5)", text: "#f5f3ff", user: "#c4b5fd", time: "#ddd6fe" }
     ];
 
-    // Default clean style for normal messages without the prefix
+    // Standard default style for normal messages
     const defaultStyle = {
       bg: "rgba(255, 255, 255, 0.95)",
       border: "1px solid rgba(226, 232, 240, 0.9)",
@@ -120,21 +119,27 @@
       const pubnub = new PubNub({
         publishKey: CONFIG.pubKey,
         subscribeKey: CONFIG.subKey,
-        userId: "embed-fixed-" + Math.random().toString(36).substring(2, 7)
+        userId: "embed-gamble-" + Math.random().toString(36).substring(2, 7)
       });
 
       pubnub.addListener({
         message: (e) => {
           const d = e.message || {};
           const user = d.user || "@anonymous";
-          const text = d.message || JSON.stringify(d);
+          let text = d.message || JSON.stringify(d);
           const time = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
           let styleToUse = defaultStyle;
 
-          // Check if the message starts with "!style"
-          if (text.trim().toLowerCase().startsWith("!style")) {
+          // Check if message starts with "!gamble"
+          if (text.trim().toLowerCase().startsWith("!gamble")) {
             styleToUse = randomStyles[Math.floor(Math.random() * randomStyles.length)];
+            
+            // Hide/strip the "!gamble" command word from the displayed message text
+            text = text.replace(/^!gamble\s*/i, "");
+            if (!text.trim()) {
+              text = "🎲 [Gambled Style]";
+            }
           }
 
           const card = document.createElement("div");
