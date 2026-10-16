@@ -1,0 +1,674 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Flappy Rotate</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; height: 100%;
+    background: #0b1020; overflow: hidden;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+    user-select: none; -webkit-user-select: none;
+    touch-action: none; overscroll-behavior: none;
+  }
+  canvas { display: block; cursor: pointer; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<script>
+"use strict";
+
+/* ============================================================
+   FLAPPY ROTATE
+   Klassieke flappy-bird gameplay, maar elke 5 gehaalde pipes
+   draait de hele wereld 90 graden (zwaartekracht draait mee).
+   De hele simulatie gebeurt in "map-ruimte"; de camera roteert.
+   ============================================================ */
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+
+/* ---------- scherm / map ---------- */
+let SW = 0, SH = 0;      // scherm (css pixels)
+let S  = 0;              // zijkant van het vierkante speelveld
+let OX = 0, OY = 0;      // oorsprong van de map op het scherm
+let DPR = 1;
+
+/* ---------- grootte-afhankelijke constanten ---------- */
+let groundH, birdR, birdX, pipeW, GAP, SPACING;
+let SPEED, GRAV, FLAPV, STROKE;
+
+function recompute() {
+  groundH = S * 0.11;
+  birdR   = S * 0.030;
+  birdX   = S * 0.32;
+  pipeW   = S * 0.085;
+  GAP     = S * 0.265;
+  SPACING = S * 0.68;
+  SPEED   = S * 0.34;    // pixels per seconde
+  GRAV    = S * 2.1;     // px / s^2
+  FLAPV   = -S * 0.74;   // startsnelheid klap
+  STROKE  = Math.max(3, S * 0.008);
+}
+
+/* ---------- spelstaat ---------- */
+const ROT_EVERY = 5;          // pipes per rotatie
+const ROT_DUR   = 1.05;       // duur van de rotatie (s)
+
+let state = "menu";           // menu | playing | over
+let pipes = [];
+let clouds = [];
+let score = 0, best = 0;
+let lastGapCenter = null;
+let speedMult = 1;
+
+let bird = { y: 0, vy: 0, rot: 0, wing: 0, flapBoost: 0 };
+
+let worldAngle = 0, rotFrom = 0, rotTo = 0, rotT = 1, rotating = false;
+let rotCount = 0;             // aantal voltooide rotaties
+let rotFlash = 0;             // "90Â° DRAAI!" flash
+
+let groundOffset = 0;
+let deadAt = 0;
+let shakeT = 0, shakeAmp = 0;
+let time = 0;
+let muted = false;
+
+try { best = parseInt(localStorage.getItem("flappyRotateBest") || "0", 10) || 0; } catch (e) {}
+
+/* ---------- paletten (wisselen per rotatie) ---------- */
+const PALETTES = [
+  { top:"#6ec8ff", bot:"#d6f4ff", orb:"#fff3b0", orbGlow:"rgba(255,240,160,.45)",
+    hill:"#8ed979", grass:"#57bd46", dirt:"#d8c07c", dirtDark:"#c2a865",
+    pipe:"#4ec93c", pipeLite:"#7ee86a", pipeDark:"#2f9a24", night:false },
+  { top:"#ffb46b", bot:"#ffe9c4", orb:"#fff0c0", orbGlow:"rgba(255,210,120,.45)",
+    hill:"#e09a5a", grass:"#c98b3f", dirt:"#b98a52", dirtDark:"#a3763f",
+    pipe:"#46c46a", pipeLite:"#77e895", pipeDark:"#27944a", night:false },
+  { top:"#1b2a63", bot:"#4a5fa8", orb:"#f4f6ff", orbGlow:"rgba(220,230,255,.35)",
+    hill:"#3d4f8c", grass:"#3e8f57", dirt:"#5d5a7a", dirtDark:"#4c4a66",
+    pipe:"#3fc7b0", pipeLite:"#75ecda", pipeDark:"#27917f", night:true },
+  { top:"#9b7bff", bot:"#ffd4ec", orb:"#ffe9a8", orbGlow:"rgba(255,225,170,.4)",
+    hill:"#a97fd4", grass:"#7b62c9", dirt:"#8a6fae", dirtDark:"#77609a",
+    pipe:"#59d94a", pipeLite:"#8ef27c", pipeDark:"#37a72c", night:false },
+];
+const pal = () => PALETTES[rotCount % PALETTES.length];
+
+/* ---------- geluid ---------- */
+let actx = null;
+function ac() {
+  if (!actx) {
+    try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {}
+  }
+  if (actx && actx.state === "suspended") actx.resume();
+  return actx;
+}
+function tone(f1, f2, dur, type, vol) {
+  if (muted) return;
+  const a = ac(); if (!a) return;
+  try {
+    const o = a.createOscillator(), g = a.createGain(), t = a.currentTime;
+    o.type = type;
+    o.frequency.setValueAtTime(f1, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(Math.max(20, f2), t + dur);
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.0008, t + dur);
+    o.connect(g); g.connect(a.destination);
+    o.start(t); o.stop(t + dur + 0.02);
+  } catch (e) {}
+}
+const sFlap   = () => tone(540, 300, 0.09, "square", 0.07);
+const sScore  = () => { tone(700, 0, 0.07, "sine", 0.12); setTimeout(() => tone(1050, 0, 0.09, "sine", 0.10), 60); };
+const sRotate = () => tone(240, 900, 0.55, "sawtooth", 0.055);
+const sHit    = () => tone(200, 55, 0.3, "square", 0.11);
+
+/* ---------- layout ---------- */
+function layout() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  SW = window.innerWidth;
+  SH = window.innerHeight;
+  canvas.width  = Math.round(SW * DPR);
+  canvas.height = Math.round(SH * DPR);
+  canvas.style.width  = SW + "px";
+  canvas.style.height = SH + "px";
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.textBaseline = "middle";
+
+  const oldS = S;
+  S = Math.min(SW, SH) * 0.96;
+  OX = (SW - S) / 2;
+  OY = (SH - S) / 2;
+  recompute();
+
+  if (oldS && oldS !== S) {
+    const k = S / oldS;
+    bird.y *= k; bird.vy *= k;
+    for (const p of pipes) { p.x *= k; p.gapTop *= k; p.gapBot *= k; }
+    if (lastGapCenter != null) lastGapCenter *= k;
+    for (const c of clouds) { c.x *= k; c.y *= k; c.s *= k; }
+  }
+  if (!clouds.length) makeClouds();
+}
+
+function makeClouds() {
+  clouds = [];
+  for (let i = 0; i < 6; i++) {
+    clouds.push({
+      x: Math.random() * S,
+      y: S * (0.08 + Math.random() * 0.38),
+      s: S * (0.05 + Math.random() * 0.05),
+      sp: 0.06 + Math.random() * 0.07,
+    });
+  }
+}
+
+/* ---------- helpers ---------- */
+const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
+const easeIO = t => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
+function rrPath(x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
+function txt(str, x, y, size, color, align, weight, outline) {
+  ctx.font = (weight || "700") + " " + Math.round(size) + 'px "Segoe UI", system-ui, sans-serif';
+  ctx.textAlign = align || "center";
+  if (outline) {
+    ctx.lineJoin = "round";
+    ctx.lineWidth = Math.max(2, size * 0.16);
+    ctx.strokeStyle = outline;
+    ctx.strokeText(str, x, y);
+  }
+  ctx.fillStyle = color;
+  ctx.fillText(str, x, y);
+}
+
+/* ---------- spel ---------- */
+function reset() {
+  pipes = [];
+  score = 0;
+  lastGapCenter = null;
+  speedMult = 1;
+  bird.y = S * 0.45; bird.vy = 0; bird.rot = 0; bird.wing = 0;
+  worldAngle = 0; rotFrom = 0; rotTo = 0; rotT = 1; rotating = false;
+  rotCount = 0; rotFlash = 0;
+  groundOffset = 0;
+  addPipe(S + S * 0.35);
+  addPipe(S + S * 0.35 + SPACING);
+}
+
+function addPipe(x) {
+  const minC = GAP / 2 + S * 0.06;
+  const maxC = S - groundH - GAP / 2 - S * 0.06;
+  let c;
+  if (lastGapCenter == null) {
+    c = minC + Math.random() * (maxC - minC);
+  } else {
+    c = lastGapCenter + (Math.random() * 2 - 1) * S * 0.22;
+    c = clamp(c, minC, maxC);
+  }
+  lastGapCenter = c;
+  pipes.push({ x, gapTop: c - GAP / 2, gapBot: c + GAP / 2, scored: false });
+}
+
+function startRotation() {
+  rotFrom = worldAngle;
+  rotTo = rotFrom + Math.PI / 2;   // altijd 90Â° per 5 pipes
+  rotT = 0;
+  rotating = true;
+  rotCount++;
+  rotFlash = 1;
+  sRotate();
+}
+
+function die() {
+  if (state !== "playing") return;
+  state = "over";
+  deadAt = performance.now();
+  shakeT = 0.35; shakeAmp = S * 0.018;
+  sHit();
+  if (score > best) {
+    best = score;
+    try { localStorage.setItem("flappyRotateBest", String(best)); } catch (e) {}
+  }
+}
+
+function flap() {
+  bird.vy = FLAPV;
+  bird.flapBoost = 1;
+  sFlap();
+}
+
+function circleRect(cx, cy, r, rx, ry, rw, rh) {
+  const px = clamp(cx, rx, rx + rw);
+  const py = clamp(cy, ry, ry + rh);
+  const dx = cx - px, dy = cy - py;
+  return dx * dx + dy * dy < r * r;
+}
+
+function update(dt) {
+  time += dt;
+
+  /* rotatie-animatie loopt altijd door */
+  if (rotating) {
+    rotT += dt / ROT_DUR;
+    if (rotT >= 1) { rotT = 1; rotating = false; }
+    worldAngle = rotFrom + (rotTo - rotFrom) * easeIO(rotT);
+  }
+  if (rotFlash > 0) rotFlash = Math.max(0, rotFlash - dt * 0.8);
+  if (shakeT > 0) shakeT = Math.max(0, shakeT - dt);
+
+  /* wolken bewegen altijd */
+  for (const c of clouds) {
+    c.x -= c.sp * S * dt;
+    if (c.x + c.s * 2 < 0) { c.x = S + c.s; c.y = S * (0.08 + Math.random() * 0.38); }
+  }
+
+  if (state !== "playing") {
+    if (state === "menu") {
+      bird.y = S * 0.45 + Math.sin(time * 2.2) * S * 0.03;
+      bird.rot = Math.sin(time * 2.2) * 0.12;
+      bird.wing += dt * 6;
+    }
+    return;
+  }
+
+  speedMult = 1 + Math.min(score, 40) * 0.008;
+  const spd = SPEED * speedMult;
+
+  /* vogel */
+  bird.vy += GRAV * dt;
+  bird.y  += bird.vy * dt;
+  const target = clamp(bird.vy / (S * 1.3), -0.55, 1.15);
+  bird.rot += (target - bird.rot) * Math.min(1, dt * 10);
+  bird.wing += dt * (bird.flapBoost > 0 ? 22 : 9);
+  bird.flapBoost = Math.max(0, bird.flapBoost - dt * 3);
+
+  /* grond-scroll */
+  groundOffset += spd * dt;
+
+  /* pipes */
+  for (const p of pipes) p.x -= spd * dt;
+  while (pipes.length && pipes[0].x + pipeW < -S * 0.1) pipes.shift();
+  const last = pipes[pipes.length - 1];
+  if (!last || last.x < S - SPACING) addPipe(last ? last.x + SPACING : S + SPACING);
+
+  /* score + rotatietrigger */
+  for (const p of pipes) {
+    if (!p.scored && p.x + pipeW < birdX - birdR) {
+      p.scored = true;
+      score++;
+      sScore();
+      if (score % ROT_EVERY === 0) startRotation();
+    }
+  }
+
+  /* botsingen */
+  if (bird.y - birdR < 0) { bird.y = birdR; die(); return; }
+  if (bird.y + birdR > S - groundH) { bird.y = S - groundH - birdR; die(); return; }
+  for (const p of pipes) {
+    if (birdX + birdR < p.x || birdX - birdR > p.x + pipeW) continue;
+    if (circleRect(birdX, bird.y, birdR, p.x, -S, pipeW, p.gapTop + S) ||
+        circleRect(birdX, bird.y, birdR, p.x, p.gapBot, pipeW, S)) { die(); return; }
+  }
+}
+
+/* ---------- tekenen ---------- */
+function drawBackground() {
+  ctx.fillStyle = "#0b1020";
+  ctx.fillRect(0, 0, SW, SH);
+  // subtiele diagonale strepen buiten het speelveld
+  ctx.strokeStyle = "rgba(255,255,255,0.035)";
+  ctx.lineWidth = 2;
+  const step = 26;
+  ctx.beginPath();
+  for (let x = -SH; x < SW + SH; x += step) { ctx.moveTo(x, 0); ctx.lineTo(x + SH, SH); }
+  ctx.stroke();
+}
+
+function drawSky(p) {
+  const g = ctx.createLinearGradient(0, 0, 0, S);
+  g.addColorStop(0, p.top);
+  g.addColorStop(1, p.bot);
+  ctx.fillStyle = g;
+  ctx.fillRect(-S, -S, 3 * S, 3 * S);
+
+  // zon / maan
+  const ox = S * 0.79, oy = S * 0.17, orr = S * 0.07;
+  const glow = ctx.createRadialGradient(ox, oy, orr * 0.4, ox, oy, orr * 2.6);
+  glow.addColorStop(0, p.orbGlow);
+  glow.addColorStop(1, "rgba(255,255,255,0)");
+  ctx.fillStyle = glow;
+  ctx.beginPath(); ctx.arc(ox, oy, orr * 2.6, 0, 7); ctx.fill();
+  ctx.fillStyle = p.orb;
+  ctx.beginPath(); ctx.arc(ox, oy, orr, 0, 7); ctx.fill();
+
+  if (p.night) {
+    ctx.fillStyle = "rgba(255,255,255,.85)";
+    for (let i = 0; i < 40; i++) {
+      const sx = ((i * 137.5) % 100) / 100 * S;
+      const sy = ((i * 61.8) % 100) / 100 * S * 0.55;
+      const tw = 0.5 + 0.5 * Math.sin(time * 3 + i);
+      ctx.globalAlpha = 0.3 + tw * 0.6;
+      ctx.fillRect(sx, sy, 2.4, 2.4);
+    }
+    ctx.globalAlpha = 1;
+  }
+}
+
+function drawClouds() {
+  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  for (const c of clouds) {
+    const s = c.s;
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, s * 0.55, 0, 7);
+    ctx.arc(c.x + s * 0.55, c.y - s * 0.22, s * 0.45, 0, 7);
+    ctx.arc(c.x + s * 1.05, c.y, s * 0.5, 0, 7);
+    ctx.arc(c.x + s * 0.5, c.y + s * 0.18, s * 0.45, 0, 7);
+    ctx.fill();
+  }
+}
+
+function drawHills(p) {
+  const base = S - groundH;
+  ctx.fillStyle = p.hill;
+  ctx.beginPath();
+  ctx.moveTo(-S, base + 2);
+  for (let x = -S; x <= 2 * S; x += S * 0.05) {
+    const h = S * 0.055 + Math.sin(x / (S * 0.16)) * S * 0.035 + Math.sin(x / (S * 0.07) + 2) * S * 0.015;
+    ctx.lineTo(x, base - Math.abs(h));
+  }
+  ctx.lineTo(2 * S, base + 2);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawGround(p) {
+  const top = S - groundH;
+  // aarde
+  ctx.fillStyle = p.dirt;
+  ctx.fillRect(-S, top, 3 * S, groundH + 2 * S);
+  // diagonale strepen die meescrollen
+  const stripe = S * 0.05;
+  const off = ((groundOffset % stripe) + stripe) % stripe;
+  ctx.fillStyle = p.dirtDark;
+  for (let x = -S - stripe * 2; x < 2 * S; x += stripe * 2) {
+    ctx.beginPath();
+    ctx.moveTo(x + off, top + groundH * 0.35);
+    ctx.lineTo(x + off + stripe, top + groundH * 0.35);
+    ctx.lineTo(x + off + stripe - groundH * 0.6, S + 2);
+    ctx.lineTo(x + off - groundH * 0.6, S + 2);
+    ctx.closePath();
+    ctx.fill();
+  }
+  // grasrand
+  ctx.fillStyle = p.grass;
+  ctx.fillRect(-S, top, 3 * S, groundH * 0.3);
+  ctx.fillStyle = "rgba(255,255,255,0.35)";
+  ctx.fillRect(-S, top, 3 * S, Math.max(2, S * 0.006));
+}
+
+function pipeBody(x, y, h) {
+  const p = pal();
+  if (h <= 0) return;
+  ctx.fillStyle = p.pipe;
+  ctx.fillRect(x, y, pipeW, h);
+  ctx.fillStyle = p.pipeLite;
+  ctx.fillRect(x + pipeW * 0.08, y, pipeW * 0.26, h);
+  ctx.fillStyle = p.pipeDark;
+  ctx.fillRect(x + pipeW * 0.68, y, pipeW * 0.32, h);
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  ctx.lineWidth = Math.max(1.5, S * 0.004);
+  ctx.strokeRect(x, y, pipeW, h);
+}
+
+function drawPipes() {
+  const p = pal();
+  const capH = S * 0.03, capW = pipeW * 1.24, dx = (capW - pipeW) / 2;
+  for (const q of pipes) {
+    // boven- en onderpijp
+    pipeBody(q.x, -S * 0.2, q.gapTop + S * 0.2);
+    pipeBody(q.x, q.gapBot, S - q.gapBot + S * 0.2);
+    // doppen
+    ctx.fillStyle = p.pipe;
+    ctx.fillRect(q.x - dx, q.gapTop - capH, capW, capH);
+    ctx.fillRect(q.x - dx, q.gapBot, capW, capH);
+    ctx.fillStyle = p.pipeLite;
+    ctx.fillRect(q.x - dx + capW * 0.07, q.gapTop - capH, capW * 0.24, capH);
+    ctx.fillRect(q.x - dx + capW * 0.07, q.gapBot, capW * 0.24, capH);
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.lineWidth = Math.max(1.5, S * 0.004);
+    ctx.strokeRect(q.x - dx, q.gapTop - capH, capW, capH);
+    ctx.strokeRect(q.x - dx, q.gapBot, capW, capH);
+  }
+}
+
+function drawBird() {
+  ctx.save();
+  ctx.translate(birdX, bird.y);
+  ctx.rotate(bird.rot);
+
+  const r = birdR;
+  const line = Math.max(1.5, r * 0.12);
+
+  // vleugel
+  const wa = Math.sin(bird.wing) * 0.55 - 0.15;
+  ctx.save();
+  ctx.translate(-r * 0.25, r * 0.15);
+  ctx.rotate(wa);
+  ctx.fillStyle = "#f7d84a";
+  ctx.strokeStyle = "#8a6a10";
+  ctx.lineWidth = line;
+  ctx.beginPath();
+  ctx.ellipse(-r * 0.1, 0, r * 0.62, r * 0.38, 0, 0, 7);
+  ctx.fill(); ctx.stroke();
+  ctx.restore();
+
+  // lijf
+  ctx.fillStyle = "#ffd93b";
+  ctx.strokeStyle = "#8a6a10";
+  ctx.lineWidth = line;
+  ctx.beginPath();
+  ctx.ellipse(0, 0, r * 1.12, r * 0.95, 0, 0, 7);
+  ctx.fill(); ctx.stroke();
+
+  // buik
+  ctx.fillStyle = "#fff2b0";
+  ctx.beginPath();
+  ctx.ellipse(r * 0.1, r * 0.38, r * 0.65, r * 0.42, 0, 0, 7);
+  ctx.fill();
+
+  // staart
+  ctx.fillStyle = "#f0b429";
+  ctx.beginPath();
+  ctx.moveTo(-r * 1.0, -r * 0.25);
+  ctx.lineTo(-r * 1.55, -r * 0.55);
+  ctx.lineTo(-r * 1.5, r * 0.15);
+  ctx.lineTo(-r * 1.0, r * 0.3);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  // oog
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(r * 0.45, -r * 0.32, r * 0.4, 0, 7); ctx.fill();
+  ctx.strokeStyle = "#8a6a10"; ctx.lineWidth = line * 0.8; ctx.stroke();
+  ctx.fillStyle = "#1b1b1b";
+  ctx.beginPath(); ctx.arc(r * 0.56, -r * 0.3, r * 0.18, 0, 7); ctx.fill();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(r * 0.62, -r * 0.38, r * 0.07, 0, 7); ctx.fill();
+
+  // snavel
+  ctx.fillStyle = "#ff8c1a";
+  ctx.strokeStyle = "#b35b00";
+  ctx.beginPath();
+  ctx.moveTo(r * 0.85, r * 0.05);
+  ctx.lineTo(r * 1.55, r * 0.2);
+  ctx.lineTo(r * 0.9, r * 0.5);
+  ctx.closePath();
+  ctx.fill(); ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawMap() {
+  const p = pal();
+  ctx.save();
+  ctx.translate(SW / 2 + (shakeT > 0 ? (Math.random() * 2 - 1) * shakeAmp * (shakeT / 0.35) : 0),
+                SH / 2 + (shakeT > 0 ? (Math.random() * 2 - 1) * shakeAmp * (shakeT / 0.35) : 0));
+  ctx.rotate(worldAngle);
+  ctx.translate(-S / 2, -S / 2);
+
+  ctx.save();
+  rrPath(0, 0, S, S, S * 0.045);
+  ctx.clip();
+  drawSky(p);
+  drawClouds();
+  drawHills(p);
+  drawGround(p);
+  drawPipes();
+  drawBird();
+  ctx.restore();
+
+  // kader rond het speelveld
+  ctx.lineWidth = STROKE;
+  ctx.strokeStyle = "rgba(255,255,255,0.9)";
+  rrPath(0, 0, S, S, S * 0.045);
+  ctx.stroke();
+  ctx.lineWidth = Math.max(1.5, STROKE * 0.35);
+  ctx.strokeStyle = "rgba(0,0,0,0.35)";
+  rrPath(0, 0, S, S, S * 0.045);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+function drawHUD() {
+  const cx = SW / 2;
+
+  if (state !== "menu") {
+    txt(String(score), cx, OY + S * 0.11, S * 0.14, "#fff", "center", "800", "rgba(0,0,0,0.55)");
+    if (state === "playing") {
+      const left = ROT_EVERY - (score % ROT_EVERY);
+      txt("Rotatie over: " + left + (left === 1 ? " pipe" : " pipes"),
+          cx, OY + S * 0.2, S * 0.038, "rgba(255,255,255,0.95)", "center", "700", "rgba(0,0,0,0.5)");
+    }
+  }
+
+  // rotatie-flash
+  if (rotFlash > 0 && state === "playing") {
+    const k = 1 - rotFlash;
+    ctx.save();
+    ctx.globalAlpha = rotFlash;
+    const size = S * (0.075 + k * 0.06);
+    txt("90Â° DRAAI!", cx, SH / 2 - S * 0.3, size, "#ffe45e", "center", "900", "rgba(0,0,0,0.6)");
+    ctx.restore();
+  }
+
+  // geluid-indicator
+  txt(muted ? "ðŸ”‡  M" : "ðŸ”Š  M", SW - 18, 24, Math.max(12, Math.min(SW, SH) * 0.026),
+      "rgba(255,255,255,0.75)", "right", "600");
+
+  if (state === "menu") panelMenu();
+  if (state === "over") panelOver();
+}
+
+function panelMenu() {
+  const w = Math.min(S * 0.86, SW * 0.92), h = Math.min(S * 0.5, SH * 0.7);
+  const x = (SW - w) / 2, y = (SH - h) / 2;
+  ctx.fillStyle = "rgba(10,15,30,0.9)";
+  rrPath(x, y, w, h, S * 0.04); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = 2; ctx.stroke();
+
+  const c = x + w / 2;
+  txt("FLAPPY", c, y + h * 0.17, h * 0.15, "#ffd93b", "center", "900", "rgba(0,0,0,0.6)");
+  txt("ROTATE", c, y + h * 0.32, h * 0.15, "#5ee6ff", "center", "900", "rgba(0,0,0,0.6)");
+  txt("Klik of SPATIE om te kappen", c, y + h * 0.5, h * 0.062, "#fff", "center", "600");
+  txt("Elke 5 pipes draait de wereld 90Â°", c, y + h * 0.6, h * 0.062, "#9fe9ff", "center", "700");
+  if (best > 0) txt("Record: " + best, c, y + h * 0.71, h * 0.058, "rgba(255,255,255,0.8)", "center", "600");
+  const pulse = 0.75 + 0.25 * Math.sin(time * 4);
+  ctx.globalAlpha = pulse;
+  txt("â–¶  KLIK OM TE STARTEN", c, y + h * 0.86, h * 0.068, "#7dff9b", "center", "800", "rgba(0,0,0,0.5)");
+  ctx.globalAlpha = 1;
+}
+
+function panelOver() {
+  const w = Math.min(S * 0.86, SW * 0.92), h = Math.min(S * 0.46, SH * 0.7);
+  const x = (SW - w) / 2, y = (SH - h) / 2;
+  const isNew = score > 0 && score >= best;
+  ctx.fillStyle = "rgba(10,15,30,0.92)";
+  rrPath(x, y, w, h, S * 0.04); ctx.fill();
+  ctx.strokeStyle = "rgba(255,255,255,0.28)"; ctx.lineWidth = 2; ctx.stroke();
+
+  const c = x + w / 2;
+  txt("GAME OVER", c, y + h * 0.19, h * 0.14, "#ff6b6b", "center", "900", "rgba(0,0,0,0.6)");
+  txt("Score: " + score, c, y + h * 0.41, h * 0.1, "#fff", "center", "800", "rgba(0,0,0,0.5)");
+  txt((isNew ? "Nieuw record!  " : "Record: ") + best,
+      c, y + h * 0.56, h * 0.07, isNew ? "#ffe45e" : "rgba(255,255,255,0.85)", "center", "700");
+  txt("Gehaald: " + Math.floor(score / ROT_EVERY) + " rotatie(s)",
+      c, y + h * 0.68, h * 0.06, "#9fe9ff", "center", "600");
+
+  const ready = performance.now() - deadAt > 500;
+  ctx.globalAlpha = ready ? (0.75 + 0.25 * Math.sin(time * 4)) : 0.35;
+  txt("Klik om opnieuw te spelen", c, y + h * 0.85, h * 0.065, "#7dff9b", "center", "800", "rgba(0,0,0,0.5)");
+  ctx.globalAlpha = 1;
+}
+
+function frame(dt) {
+  update(dt);
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawBackground();
+  drawMap();
+  drawHUD();
+}
+
+/* ---------- input ---------- */
+function primaryAction() {
+  ac();
+  if (state === "menu") { reset(); state = "playing"; flap(); return; }
+  if (state === "playing") { flap(); return; }
+  if (state === "over" && performance.now() - deadAt > 500) { reset(); state = "playing"; flap(); }
+}
+
+window.addEventListener("pointerdown", e => {
+  e.preventDefault();
+  primaryAction();
+}, { passive: false });
+
+window.addEventListener("keydown", e => {
+  if (e.code === "Space" || e.code === "ArrowUp" || e.code === "KeyW") {
+    e.preventDefault();
+    if (!e.repeat) primaryAction();
+  } else if (e.code === "KeyM") {
+    muted = !muted;
+  } else if (e.code === "KeyR") {
+    reset(); state = "playing";
+  }
+});
+
+window.addEventListener("resize", layout);
+window.addEventListener("contextmenu", e => e.preventDefault());
+
+/* ---------- start ---------- */
+layout();
+reset();
+state = "menu";
+
+let last = performance.now();
+function loop(now) {
+  const dt = Math.min(0.05, (now - last) / 1000);
+  last = now;
+  frame(dt);
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
